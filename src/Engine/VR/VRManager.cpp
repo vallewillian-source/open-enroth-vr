@@ -526,8 +526,11 @@ glm::mat4 VRManager::GetCurrentViewMatrix(const glm::vec3& worldOrigin, float ya
     // We rotate the world around Z by -Yaw to match the camera's orientation.
     // We intentionally ignore pitch/roll from the game as the HMD provides those.
     // Note: We might need to adjust the phase of yaw (e.g. + PI/2) depending on 0-angle convention.
-    // For now, assuming standard counter-clockwise Z rotation.
-    glm::mat4 gameRotation = glm::rotate(glm::mat4(1.0f), -yawRad, glm::vec3(0, 0, 1));
+    // MM7 Yaw 0 looks at -X. OpenXR Forward is -Z.
+    // Previous attempt with -PI/2 resulted in 180 degree flip (looking backward).
+    // So we need to flip it by 180 degrees.
+    // -PI/2 + PI = +PI/2.
+    glm::mat4 gameRotation = glm::rotate(glm::mat4(1.0f), -yawRad + glm::half_pi<float>(), glm::vec3(0, 0, 1));
     
     // Translation to World Origin (Party Position)
     // We invert the world origin to make it the camera position relative to origin
