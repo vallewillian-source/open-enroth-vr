@@ -27,6 +27,7 @@
 #include "Media/Audio/AudioPlayer.h"
 
 #include "Library/Logger/Logger.h"
+#include "Engine/VR/VRManager.h"
 
 std::shared_ptr<Io::Mouse> mouse = nullptr;
 
@@ -120,6 +121,20 @@ void Io::Mouse::DrawCursor() {
             render->DrawQuad2D(pointer, pViewport.center() - pointer->size() / 2);
         } else {
             platform->setCursorShown(true);
+        }
+    }
+
+    if (VRManager::Get().IsInitialized()) {
+        const auto dims = render->GetRenderDimensions();
+        int vrX = 0, vrY = 0;
+        bool vrClick = false;
+        if (VRManager::Get().GetMenuMouseState(dims.w, dims.h, vrX, vrY, vrClick)) {
+             Recti r;
+             r.w = 6;
+             r.h = 6;
+             r.x = vrX - r.w / 2;
+             r.y = vrY - r.h / 2;
+             render->FillRect(r, colorTable.Blue);
         }
     }
 
