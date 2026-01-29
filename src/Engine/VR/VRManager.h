@@ -84,6 +84,8 @@ public:
     void CaptureScreenToOverlayLayer(int srcWidth, int srcHeight);
     void SetOverlayLayerEnabled(bool enabled);
 
+    bool GetMenuMouseState(int menuWidth, int menuHeight, int& outX, int& outY, bool& outClickPressed);
+
 private:
     VRManager();
     ~VRManager();
@@ -139,6 +141,15 @@ private:
     bool m_overlayLayerHasFrame = false;
     bool m_overlayLayerAnchorPoseValid = false;
     XrPosef m_overlayLayerAnchorPose = {};
+
+    XrActionSet m_menuActionSet = XR_NULL_HANDLE;
+    XrAction m_menuAimPoseAction = XR_NULL_HANDLE;
+    XrAction m_menuSelectClickAction = XR_NULL_HANDLE;
+    XrAction m_menuSelectValueAction = XR_NULL_HANDLE;
+    XrSpace m_menuAimSpaceRight = XR_NULL_HANDLE;
+    XrPath m_handLeftPath = XR_NULL_PATH;
+    XrPath m_handRightPath = XR_NULL_PATH;
+    bool m_menuSelectPressedPrev = false;
     
     // Frame State
     XrFrameState m_frameState = {XR_TYPE_FRAME_STATE};

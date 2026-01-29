@@ -476,6 +476,24 @@ void Menu::MenuLoop() {
             VRManager::Get().SetOverlayLayerEnabled(true);
         }
 
+        bool shouldRenderVR = false;
+        if (VRManager::Get().IsInitialized() && VRManager::Get().IsSessionRunning()) {
+            shouldRenderVR = VRManager::Get().BeginFrame();
+        }
+
+        if (shouldRenderVR) {
+            int menuX = 0;
+            int menuY = 0;
+            bool menuClickPressed = false;
+            const auto dims = render->GetRenderDimensions();
+            if (VRManager::Get().GetMenuMouseState(dims.w, dims.h, menuX, menuY, menuClickPressed)) {
+                mouse->setPosition({menuX, menuY});
+                if (menuClickPressed) {
+                    mouse->UI_OnMouseLeftClick();
+                }
+            }
+        }
+
         GameUI_WritePointedObjectStatusString();
         render->BeginScene2D();
         engine->DrawGUI();
@@ -484,7 +502,7 @@ void Menu::MenuLoop() {
         mouse->DrawCursor();
 
         // VR: Render Frame
-        if (VRManager::Get().IsInitialized() && VRManager::Get().BeginFrame()) {
+        if (shouldRenderVR) {
             render->flushAndScale();
             render->BindRenderFramebufferForRead();
             VRManager::Get().CaptureScreenToOverlayLayer(render->GetRenderDimensions().w, render->GetRenderDimensions().h);
