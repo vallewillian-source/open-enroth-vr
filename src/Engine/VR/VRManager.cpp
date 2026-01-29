@@ -122,6 +122,13 @@ VRManager& VRManager::Get() {
 VRManager::VRManager() {}
 VRManager::~VRManager() { Shutdown(); }
 
+void VRManager::SetOverlayLayerEnabled(bool enabled) {
+    if (enabled == m_overlayLayerEnabled) return;
+    m_overlayLayerEnabled = enabled;
+    m_overlayLayerHasFrame = false;
+    m_overlayLayerAnchorPoseValid = false;
+}
+
 bool VRManager::Initialize() {
     if (m_instance != XR_NULL_HANDLE) return true;
 
@@ -773,6 +780,25 @@ bool VRManager::BeginFrame() {
         m_projectionViews[i].subImage.imageRect.extent = {m_swapchains[i].width, m_swapchains[i].height};
     }
 
+    if (m_overlayLayerEnabled && !m_overlayLayerAnchorPoseValid && viewCountOutput > 0) {
+        glm::vec3 p0(m_xrViews[0].pose.position.x, m_xrViews[0].pose.position.y, m_xrViews[0].pose.position.z);
+        glm::vec3 center = p0;
+        if (viewCountOutput > 1) {
+            glm::vec3 p1(m_xrViews[1].pose.position.x, m_xrViews[1].pose.position.y, m_xrViews[1].pose.position.z);
+            center = (p0 + p1) * 0.5f;
+        }
+
+        glm::quat ori(m_xrViews[0].pose.orientation.w, m_xrViews[0].pose.orientation.x, m_xrViews[0].pose.orientation.y, m_xrViews[0].pose.orientation.z);
+        glm::vec3 forward = glm::normalize(ori * glm::vec3(0.0f, 0.0f, -1.0f));
+        glm::vec3 quadPos = center + forward * 1.5f;
+
+        m_overlayLayerAnchorPose.orientation = m_xrViews[0].pose.orientation;
+        m_overlayLayerAnchorPose.position.x = quadPos.x;
+        m_overlayLayerAnchorPose.position.y = quadPos.y;
+        m_overlayLayerAnchorPose.position.z = quadPos.z;
+        m_overlayLayerAnchorPoseValid = true;
+    }
+
     return true;
 }
 
@@ -785,14 +811,25 @@ void VRManager::EndFrame() {
     XrCompositionLayerQuad quadLayer = {XR_TYPE_COMPOSITION_LAYER_QUAD};
     std::array<const XrCompositionLayerBaseHeader*, 2> layers = { (const XrCompositionLayerBaseHeader*)&projectionLayer, nullptr };
     uint32_t layerCount = 1;
-    if (m_overlayLayerEnabled && m_overlayLayerHasFrame && m_overlayLayerSwapchain != XR_NULL_HANDLE && m_viewSpace != XR_NULL_HANDLE) {
+    if (m_overlayLayerEnabled && m_overlayLayerHasFrame && m_overlayLayerSwapchain != XR_NULL_HANDLE) {
         quadLayer.layerFlags = 0;
-        quadLayer.space = m_viewSpace;
         quadLayer.eyeVisibility = XR_EYE_VISIBILITY_BOTH;
-        quadLayer.pose.orientation.w = 1.0f;
-        quadLayer.pose.position.x = 0.0f;
-        quadLayer.pose.position.y = 0.0f;
-        quadLayer.pose.position.z = -1.5f;
+        if (m_overlayLayerAnchorPoseValid && m_appSpace != XR_NULL_HANDLE) {
+            quadLayer.space = m_appSpace;
+            quadLayer.pose = m_overlayLayerAnchorPose;
+        } else if (m_viewSpace != XR_NULL_HANDLE) {
+            quadLayer.space = m_viewSpace;
+            quadLayer.pose.orientation.w = 1.0f;
+            quadLayer.pose.position.x = 0.0f;
+            quadLayer.pose.position.y = 0.0f;
+            quadLayer.pose.position.z = -1.5f;
+        } else {
+            quadLayer.space = m_appSpace;
+            quadLayer.pose.orientation.w = 1.0f;
+            quadLayer.pose.position.x = 0.0f;
+            quadLayer.pose.position.y = 0.0f;
+            quadLayer.pose.position.z = 0.0f;
+        }
         quadLayer.size.width = 1.0f;
         quadLayer.size.height = 0.75f;
         quadLayer.subImage.swapchain = m_overlayLayerSwapchain;
@@ -890,6 +927,7 @@ void VRManager::Shutdown() {
     }
     m_overlayLayerImages.clear();
     m_overlayLayerHasFrame = false;
+    m_overlayLayerAnchorPoseValid = false;
     if (m_overlayLayerFBO != 0) {
         glDeleteFramebuffers(1, &m_overlayLayerFBO);
         m_overlayLayerFBO = 0;

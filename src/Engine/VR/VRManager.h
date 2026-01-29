@@ -82,7 +82,7 @@ public:
     // Overlay layer (OpenXR quad layer) methods
     void InitOverlayLayer(int width, int height);
     void CaptureScreenToOverlayLayer(int srcWidth, int srcHeight);
-    void SetOverlayLayerEnabled(bool enabled) { m_overlayLayerEnabled = enabled; }
+    void SetOverlayLayerEnabled(bool enabled);
 
 private:
     VRManager();
@@ -137,6 +137,8 @@ private:
     int m_overlayLayerHeight = 0;
     bool m_overlayLayerEnabled = false;
     bool m_overlayLayerHasFrame = false;
+    bool m_overlayLayerAnchorPoseValid = false;
+    XrPosef m_overlayLayerAnchorPose = {};
     
     // Frame State
     XrFrameState m_frameState = {XR_TYPE_FRAME_STATE};
