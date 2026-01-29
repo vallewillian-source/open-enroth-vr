@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cmath>
 #include <utility>
 #include <vector>
 
@@ -297,45 +298,45 @@ void BaseRenderer::TransformBillboard(const RenderBillboard *pBillboard, int par
     else
         billboard->opacity = RenderBillboardD3D::Transparent;
 
-    float point_x = pSprite->uWidth / 2 - pSprite->uAreaX;
-    float point_y = pSprite->uHeight - pSprite->uAreaY;
+    glm::vec3 up_view = glm::vec3(0.0f, 0.0f, 1.0f) * pCamera3D->ViewMatrix;
+    float roll = std::atan2(-up_view.y, up_view.z);
+    float cos_r = std::cos(roll);
+    float sin_r = std::sin(roll);
+
+    auto SetQuad = [&](int i, float dx, float dy, float u, float v) {
+        float rx = dx * cos_r - dy * sin_r;
+        float ry = dx * sin_r + dy * cos_r;
+
+        billboard->pQuads[i].diffuse = diffuse;
+        billboard->pQuads[i].pos.x = pBillboard->screenPos.x + rx;
+        billboard->pQuads[i].pos.y = pBillboard->screenPos.y + ry;
+        billboard->pQuads[i].pos.z = pBillboard->view_space_z;
+        billboard->pQuads[i].texcoord.x = u;
+        billboard->pQuads[i].texcoord.y = v;
+    };
+
+    float point_x = 0.0f;
+    float point_y = 0.0f;
+
+    point_x = pSprite->uWidth / 2 - pSprite->uAreaX;
+    point_y = pSprite->uHeight - pSprite->uAreaY;
     if (pBillboard->flags & BILLBOARD_MIRRORED) point_x *= -1.f;
-    billboard->pQuads[0].diffuse = diffuse;
-    billboard->pQuads[0].pos.x = pBillboard->screenPos.x - point_x * scr_proj_x;
-    billboard->pQuads[0].pos.y = pBillboard->screenPos.y - point_y * scr_proj_y;
-    billboard->pQuads[0].pos.z = pBillboard->view_space_z;
-    billboard->pQuads[0].texcoord.x = 0.f;
-    billboard->pQuads[0].texcoord.y = 0.f;
+    SetQuad(0, -point_x * scr_proj_x, -point_y * scr_proj_y, 0.f, 0.f);
 
     point_x = pSprite->uWidth / 2 - pSprite->uAreaX;
     point_y = -pSprite->uAreaY;
-    if (pBillboard->flags & BILLBOARD_MIRRORED) point_x = point_x * -1.f;
-    billboard->pQuads[1].diffuse = diffuse;
-    billboard->pQuads[1].pos.x = pBillboard->screenPos.x - point_x * scr_proj_x;
-    billboard->pQuads[1].pos.y = pBillboard->screenPos.y - point_y * scr_proj_y;
-    billboard->pQuads[1].pos.z = pBillboard->view_space_z;
-    billboard->pQuads[1].texcoord.x = 0.f;
-    billboard->pQuads[1].texcoord.y = 1.f;
+    if (pBillboard->flags & BILLBOARD_MIRRORED) point_x *= -1.f;
+    SetQuad(1, -point_x * scr_proj_x, -point_y * scr_proj_y, 0.f, 1.f);
 
     point_x = pSprite->uWidth / 2 + pSprite->uAreaX;
     point_y = -pSprite->uAreaY;
     if (pBillboard->flags & BILLBOARD_MIRRORED) point_x *= -1.f;
-    billboard->pQuads[2].diffuse = diffuse;
-    billboard->pQuads[2].pos.x = pBillboard->screenPos.x + point_x * scr_proj_x;
-    billboard->pQuads[2].pos.y = pBillboard->screenPos.y - point_y * scr_proj_y;
-    billboard->pQuads[2].pos.z = pBillboard->view_space_z;
-    billboard->pQuads[2].texcoord.x = 1.f;
-    billboard->pQuads[2].texcoord.y = 1.f;
+    SetQuad(2, point_x * scr_proj_x, -point_y * scr_proj_y, 1.f, 1.f);
 
     point_x = pSprite->uWidth / 2 + pSprite->uAreaX;
     point_y = pSprite->uHeight - pSprite->uAreaY;
     if (pBillboard->flags & BILLBOARD_MIRRORED) point_x *= -1.f;
-    billboard->pQuads[3].diffuse = diffuse;
-    billboard->pQuads[3].pos.x = pBillboard->screenPos.x + point_x * scr_proj_x;
-    billboard->pQuads[3].pos.y = pBillboard->screenPos.y - point_y * scr_proj_y;
-    billboard->pQuads[3].pos.z = pBillboard->view_space_z;
-    billboard->pQuads[3].texcoord.x = 1.f;
-    billboard->pQuads[3].texcoord.y = 0.f;
+    SetQuad(3, point_x * scr_proj_x, -point_y * scr_proj_y, 1.f, 0.f);
 
     billboard->uNumVertices = 4;
 
@@ -441,6 +442,20 @@ void BaseRenderer::MakeParticleBillboardAndPush(const Particle& p) {
         billboard->pQuads[3].texcoord.x = 1.0;
         billboard->pQuads[3].texcoord.y = 0.0;
     }
+
+    glm::vec3 up_view = glm::vec3(0.0f, 0.0f, 1.0f) * pCamera3D->ViewMatrix;
+    float roll = std::atan2(-up_view.y, up_view.z);
+    float cos_r = std::cos(roll);
+    float sin_r = std::sin(roll);
+
+    float pivotX = (float)p.uScreenSpaceX;
+    float pivotY = (float)p.uScreenSpaceY - 12.0f * p.screenspace_scale;
+    for (int i = 0; i < 4; ++i) {
+        float dx = billboard->pQuads[i].pos.x - pivotX;
+        float dy = billboard->pQuads[i].pos.y - pivotY;
+        billboard->pQuads[i].pos.x = pivotX + dx * cos_r - dy * sin_r;
+        billboard->pQuads[i].pos.y = pivotY + dx * sin_r + dy * cos_r;
+    }
 }
 
 float BaseRenderer::GetGamma() {
@@ -495,6 +510,27 @@ void BaseRenderer::BillboardSphereSpellFX(SpellFX_Billboard *a1, Color diffuse) 
 
         pBillboardRenderListD3D[v5].pQuads[i].texcoord.x = 0.5;
         pBillboardRenderListD3D[v5].pQuads[i].texcoord.y = 0.5;
+    }
+
+    glm::vec3 up_view = glm::vec3(0.0f, 0.0f, 1.0f) * pCamera3D->ViewMatrix;
+    float roll = std::atan2(-up_view.y, up_view.z);
+    float cos_r = std::cos(roll);
+    float sin_r = std::sin(roll);
+
+    float pivotX = 0.0f;
+    float pivotY = 0.0f;
+    for (unsigned int i = 0; i < (unsigned int)a1->uNumVertices; ++i) {
+        pivotX += pBillboardRenderListD3D[v5].pQuads[i].pos.x;
+        pivotY += pBillboardRenderListD3D[v5].pQuads[i].pos.y;
+    }
+    pivotX /= (float)a1->uNumVertices;
+    pivotY /= (float)a1->uNumVertices;
+
+    for (unsigned int i = 0; i < (unsigned int)a1->uNumVertices; ++i) {
+        float dx = pBillboardRenderListD3D[v5].pQuads[i].pos.x - pivotX;
+        float dy = pBillboardRenderListD3D[v5].pQuads[i].pos.y - pivotY;
+        pBillboardRenderListD3D[v5].pQuads[i].pos.x = pivotX + dx * cos_r - dy * sin_r;
+        pBillboardRenderListD3D[v5].pQuads[i].pos.y = pivotY + dx * sin_r + dy * cos_r;
     }
 }
 
