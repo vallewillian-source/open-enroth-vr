@@ -150,8 +150,9 @@ void Engine::drawWorld() {
         float yawRad = pParty->_viewYaw * (2.0f * 3.14159265359f / 2048.0f);
         
         // Get VR View Matrix (includes HMD rotation + Party Yaw + Party Pos)
+        // Fix: Add eyeLevel to base position so the camera isn't at floor level
         glm::mat4 vrView = VRManager::Get().GetCurrentViewMatrix(
-            glm::vec3(pParty->pos.x, pParty->pos.y, pParty->pos.z),
+            glm::vec3(pParty->pos.x, pParty->pos.y, pParty->pos.z + pParty->eyeLevel),
             yawRad,
             0.0f // Pitch ignored by VRManager (uses HMD pitch)
         );
