@@ -18,9 +18,11 @@
 #include <string>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include "VRInputState.h"
 
 class VRManager {
 public:
+    using VRInputState = ::VRInputState;
     static VRManager& Get();
 
     // Inicializa OpenXR Instance e System
@@ -86,22 +88,6 @@ public:
 
     bool GetMenuMouseState(int menuWidth, int menuHeight, int& outX, int& outY, bool& outClickPressed);
 
-    struct VRInputState {
-        glm::vec2 move = {0.0f, 0.0f};
-        glm::vec2 turn = {0.0f, 0.0f};
-        bool jump = false;
-        bool attack = false;
-        bool castReady = false;
-        bool interact = false;
-        bool esc = false;
-        bool combat = false;
-        bool cast = false;
-        bool flyUp = false;
-        bool flyDown = false;
-        bool quest = false;
-        bool pass = false;
-    };
-    
     VRInputState GetVRInputState();
 
 private:

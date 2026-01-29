@@ -1359,7 +1359,7 @@ VRManager::VRInputState VRManager::GetVRInputState() {
         getInfo.action = action;
         XrActionStateBoolean boolState = {XR_TYPE_ACTION_STATE_BOOLEAN};
         if (XR_FAILED(xrGetActionStateBoolean(m_session, &getInfo, &boolState))) return false;
-        return (bool)boolState.currentState;
+        return boolState.isActive && (bool)boolState.currentState;
     };
 
     auto getActionVec2 = [&](XrAction action) {
@@ -1368,6 +1368,7 @@ VRManager::VRInputState VRManager::GetVRInputState() {
         getInfo.action = action;
         XrActionStateVector2f vec2State = {XR_TYPE_ACTION_STATE_VECTOR2F};
         if (XR_FAILED(xrGetActionStateVector2f(m_session, &getInfo, &vec2State))) return glm::vec2(0.0f);
+        if (!vec2State.isActive) return glm::vec2(0.0f);
         return glm::vec2(vec2State.currentState.x, vec2State.currentState.y);
     };
     
@@ -1377,11 +1378,15 @@ VRManager::VRInputState VRManager::GetVRInputState() {
         getInfo.action = action;
         XrActionStateFloat floatState = {XR_TYPE_ACTION_STATE_FLOAT};
         if (XR_FAILED(xrGetActionStateFloat(m_session, &getInfo, &floatState))) return false;
-        return floatState.currentState > threshold;
+        return floatState.isActive && floatState.currentState > threshold;
     };
 
-    state.move = getActionVec2(m_actionMove);
-    state.turn = getActionVec2(m_actionTurn);
+    glm::vec2 move = getActionVec2(m_actionMove);
+    state.moveX = move.x;
+    state.moveY = move.y;
+    glm::vec2 turn = getActionVec2(m_actionTurn);
+    state.turnX = turn.x;
+    state.turnY = turn.y;
     state.attack = getActionBool(m_actionAttack);
     state.castReady = getActionBool(m_actionCastReady);
     state.interact = getActionFloatAsBool(m_actionInteract, 0.5f);
@@ -1394,7 +1399,7 @@ VRManager::VRInputState VRManager::GetVRInputState() {
     state.pass = getActionBool(m_actionPass);
     
     // Jump: Right Stick Up (Turn Y > 0.5)
-    state.jump = state.turn.y > 0.5f;
+    state.jump = state.turnY > 0.5f;
 
     return state;
 }
