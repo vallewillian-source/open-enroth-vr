@@ -712,7 +712,13 @@ bool VRManager::CreateSession(HDC hDC, HGLRC hGLRC) {
             createAction("attack", "Attack", XR_ACTION_TYPE_BOOLEAN_INPUT, &m_actionAttack);
             createAction("cast_ready", "Cast Ready", XR_ACTION_TYPE_BOOLEAN_INPUT, &m_actionCastReady);
             createAction("interact", "Interact", XR_ACTION_TYPE_FLOAT_INPUT, &m_actionInteract);
-            createAction("yell", "Yell", XR_ACTION_TYPE_FLOAT_INPUT, &m_actionYell);
+            createAction("esc", "Escape", XR_ACTION_TYPE_FLOAT_INPUT, &m_actionEsc);
+            createAction("combat", "Combat", XR_ACTION_TYPE_BOOLEAN_INPUT, &m_actionCombat);
+            createAction("cast", "Cast", XR_ACTION_TYPE_BOOLEAN_INPUT, &m_actionCast);
+            createAction("fly_up", "Fly Up", XR_ACTION_TYPE_FLOAT_INPUT, &m_actionFlyUp);
+            createAction("fly_down", "Fly Down", XR_ACTION_TYPE_FLOAT_INPUT, &m_actionFlyDown);
+            createAction("quest", "Quest", XR_ACTION_TYPE_BOOLEAN_INPUT, &m_actionQuest);
+            createAction("pass", "Pass", XR_ACTION_TYPE_BOOLEAN_INPUT, &m_actionPass);
             
             // Bindings
             auto suggest = [&](const char* profile, std::vector<std::pair<XrAction, const char*>> bindings) {
@@ -742,7 +748,13 @@ bool VRManager::CreateSession(HDC hDC, HGLRC hGLRC) {
                 {m_actionAttack, "/user/hand/right/input/b/click"},
                 {m_actionCastReady, "/user/hand/right/input/a/click"},
                 {m_actionInteract, "/user/hand/right/input/trigger/value"}, // Using value as bool (threshold)
-                {m_actionYell, "/user/hand/left/input/trigger/value"}
+                {m_actionEsc, "/user/hand/left/input/trigger/value"},
+                {m_actionCombat, "/user/hand/left/input/y/click"},
+                {m_actionCast, "/user/hand/left/input/x/click"},
+                {m_actionFlyUp, "/user/hand/right/input/squeeze/value"},
+                {m_actionFlyDown, "/user/hand/left/input/squeeze/value"},
+                {m_actionQuest, "/user/hand/left/input/thumbstick/click"},
+                {m_actionPass, "/user/hand/right/input/thumbstick/click"}
             });
         }
 
@@ -1126,7 +1138,13 @@ void VRManager::Shutdown() {
         m_actionAttack = XR_NULL_HANDLE;
         m_actionCastReady = XR_NULL_HANDLE;
         m_actionInteract = XR_NULL_HANDLE;
-        m_actionYell = XR_NULL_HANDLE;
+        m_actionEsc = XR_NULL_HANDLE;
+        m_actionCombat = XR_NULL_HANDLE;
+        m_actionCast = XR_NULL_HANDLE;
+        m_actionFlyUp = XR_NULL_HANDLE;
+        m_actionFlyDown = XR_NULL_HANDLE;
+        m_actionQuest = XR_NULL_HANDLE;
+        m_actionPass = XR_NULL_HANDLE;
     }
 
     if (m_overlayLayerSwapchain != XR_NULL_HANDLE) {
@@ -1367,7 +1385,13 @@ VRManager::VRInputState VRManager::GetVRInputState() {
     state.attack = getActionBool(m_actionAttack);
     state.castReady = getActionBool(m_actionCastReady);
     state.interact = getActionFloatAsBool(m_actionInteract, 0.5f);
-    state.yell = getActionFloatAsBool(m_actionYell, 0.5f);
+    state.esc = getActionFloatAsBool(m_actionEsc, 0.5f);
+    state.combat = getActionBool(m_actionCombat);
+    state.cast = getActionBool(m_actionCast);
+    state.flyUp = getActionFloatAsBool(m_actionFlyUp, 0.5f);
+    state.flyDown = getActionFloatAsBool(m_actionFlyDown, 0.5f);
+    state.quest = getActionBool(m_actionQuest);
+    state.pass = getActionBool(m_actionPass);
     
     // Jump: Right Stick Up (Turn Y > 0.5)
     state.jump = state.turn.y > 0.5f;

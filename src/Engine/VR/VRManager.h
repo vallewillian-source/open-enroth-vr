@@ -93,7 +93,13 @@ public:
         bool attack = false;
         bool castReady = false;
         bool interact = false;
-        bool yell = false;
+        bool esc = false;
+        bool combat = false;
+        bool cast = false;
+        bool flyUp = false;
+        bool flyDown = false;
+        bool quest = false;
+        bool pass = false;
     };
     
     VRInputState GetVRInputState();
@@ -166,7 +172,13 @@ private:
     XrAction m_actionAttack = XR_NULL_HANDLE;
     XrAction m_actionCastReady = XR_NULL_HANDLE;
     XrAction m_actionInteract = XR_NULL_HANDLE; // Trigger Right
-    XrAction m_actionYell = XR_NULL_HANDLE; // Trigger Left
+    XrAction m_actionEsc = XR_NULL_HANDLE; // Trigger Left
+    XrAction m_actionCombat = XR_NULL_HANDLE; // Y Button
+    XrAction m_actionCast = XR_NULL_HANDLE; // X Button
+    XrAction m_actionFlyUp = XR_NULL_HANDLE; // Grip Right
+    XrAction m_actionFlyDown = XR_NULL_HANDLE; // Grip Left
+    XrAction m_actionQuest = XR_NULL_HANDLE; // Left Stick Click
+    XrAction m_actionPass = XR_NULL_HANDLE; // Right Stick Click
     // Jump is derived from Turn (Right Thumbstick Up)
 
     XrSpace m_menuAimSpaceRight = XR_NULL_HANDLE;

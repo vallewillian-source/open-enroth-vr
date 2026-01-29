@@ -129,7 +129,13 @@ void Io::KeyboardInputHandler::GenerateActions(bool isPaused) {
             // "Cast Ready" mapped to Quick Cast
             if (vrInput.castReady) ProcessGameplayAction(INPUT_ACTION_QUICK_CAST);
             if (vrInput.jump) ProcessGameplayAction(INPUT_ACTION_JUMP);
-            if (vrInput.yell) ProcessGameplayAction(INPUT_ACTION_YELL);
+            if (vrInput.esc) ProcessGameplayAction(INPUT_ACTION_ESCAPE);
+            if (vrInput.combat) ProcessGameplayAction(INPUT_ACTION_TOGGLE_TURN_BASED);
+            if (vrInput.cast) ProcessGameplayAction(INPUT_ACTION_OPEN_SPELLBOOK);
+            if (vrInput.flyUp) ProcessGameplayAction(INPUT_ACTION_FLY_UP);
+            if (vrInput.flyDown) ProcessGameplayAction(INPUT_ACTION_FLY_DOWN);
+            if (vrInput.quest) ProcessGameplayAction(INPUT_ACTION_OPEN_QUESTS);
+            if (vrInput.pass) ProcessGameplayAction(INPUT_ACTION_PASS);
         }
         
         if (vrInput.interact) {
