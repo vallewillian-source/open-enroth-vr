@@ -187,9 +187,27 @@ void Camera3D::CreateViewMatrixAndProjectionScale() {
     fov_y_deg = (180.0 / pi) * 2.0 * std::atan((pViewport.h / 2.0) / pCamera3D->ViewPlaneDistPixels);
 
     screenCenterX = (double)pViewport.center().x;
-    screenCenterY = (double)pViewport.center().y - pViewport.y;
+    screenCenterY = (double)pViewport.center().y;
+
+    screenScaleX = ViewPlaneDistPixels;
+    screenScaleY = ViewPlaneDistPixels;
 
     aspect = float(pViewport.w / float(pViewport.h));
+}
+
+void Camera3D::SetProjectionVR(float tanL, float tanR, float tanU, float tanD) {
+    float w = (float)pViewport.w;
+    float h = (float)pViewport.h;
+
+    screenScaleX = w / (tanR - tanL);
+    screenCenterX = pViewport.x + w * (-tanL) / (tanR - tanL);
+
+    screenScaleY = h / (tanU - tanD);
+    screenCenterY = pViewport.y + h * tanU / (tanU - tanD);
+}
+
+void Camera3D::ResetProjection() {
+    CreateViewMatrixAndProjectionScale();
 }
 
 //----- (004374E8) --------------------------------------------------------
@@ -362,8 +380,8 @@ bool Camera3D::ClipFaceToFrustum(RenderVertexSoft *pInVertices,
 }
 
 Vec2f Camera3D::Project(const Vec3f& pos) const {
-    float viewscalefactor = ViewPlaneDistPixels / pos.x;
-    return { pViewport.center().x - viewscalefactor * pos.y , pViewport.center().y - viewscalefactor * pos.z };
+    float invX = 1.0f / pos.x;
+    return { screenCenterX - screenScaleX * pos.y * invX, screenCenterY - screenScaleY * pos.z * invX };
 }
 
 Vec2f Camera3D::FitToViewport(const Vec2f& projPos) const {

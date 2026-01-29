@@ -8,6 +8,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <glm/gtc/matrix_transform.hpp>
+#include <cmath>
 
 #include "Engine/Graphics/Camera.h"
 #include "Library/Logger/Logger.h"
@@ -565,5 +566,25 @@ void VRManager::BindSwapchainFramebuffer(int viewIndex) {
                          scissorEnabled ? 1 : 0,
                          scissorBox[0], scissorBox[1], scissorBox[2], scissorBox[3]);
         }
+    }
+}
+
+void VRManager::GetViewTangents(int viewIndex, float& l, float& r, float& u, float& d) {
+    if (viewIndex >= 0 && viewIndex < m_xrViews.size()) {
+        l = std::tan(m_xrViews[viewIndex].fov.angleLeft);
+        r = std::tan(m_xrViews[viewIndex].fov.angleRight);
+        d = std::tan(m_xrViews[viewIndex].fov.angleDown);
+        u = std::tan(m_xrViews[viewIndex].fov.angleUp);
+    } else {
+        l = -1.0f; r = 1.0f; d = -1.0f; u = 1.0f; // Default dummy
+    }
+}
+
+void VRManager::GetViewSize(int viewIndex, int& w, int& h) const {
+    if (viewIndex >= 0 && viewIndex < m_views.size()) {
+        w = m_views[viewIndex].width;
+        h = m_views[viewIndex].height;
+    } else {
+        w = 0; h = 0;
     }
 }

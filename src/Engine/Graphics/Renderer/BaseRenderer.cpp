@@ -355,7 +355,9 @@ bool BaseRenderer::AddBillboardIfVisible(Sprite* spr, int palette, const Vec3f& 
     Vec3f viewspace;
     if (pCamera3D->ViewClip(pos, &viewspace)) {
         Vec2f projected = pCamera3D->Project(viewspace);
-        Vec2f billScale = scale * pCamera3D->ViewPlaneDistPixels / viewspace.x;
+        Vec2f billScale;
+        billScale.x = scale.x * pCamera3D->screenScaleX / viewspace.x;
+        billScale.y = scale.y * pCamera3D->screenScaleY / viewspace.x;
         float billboardWidth = billScale.x * spr->uWidth;
         float billboardHeight = billScale.y * spr->uHeight;
         Rectf billboardRect(projected.x - billboardWidth / 2, projected.y - billboardHeight, billboardWidth, billboardHeight);

@@ -67,6 +67,11 @@ struct Camera3D {
     float screenCenterY = 0;
     // these are the effective focal distances of the camera in screen space pixels.
     float ViewPlaneDistPixels = 0;
+    float screenScaleX = 0;
+    float screenScaleY = 0;
+
+    void SetProjectionVR(float tanL, float tanR, float tanU, float tanD);
+    void ResetProjection();
 
     // Camera field of view angles in degrees and radians
     int odm_fov_deg = 75;

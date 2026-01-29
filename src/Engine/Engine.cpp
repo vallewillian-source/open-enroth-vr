@@ -139,6 +139,13 @@ void Engine::drawWorld() {
 
     pCamera3D->CalculateRotations(pParty->_viewYaw, pParty->_viewPitch);
     pCamera3D->CreateViewMatrixAndProjectionScale();
+
+    if (VRManager::Get().IsInitialized() && VRManager::Get().IsRenderingVREye()) {
+        float l, r, u, d;
+        VRManager::Get().GetViewTangents(VRManager::Get().GetCurrentViewIndex(), l, r, u, d);
+        pCamera3D->SetProjectionVR(l, r, u, d);
+    }
+
     pCamera3D->BuildViewFrustum();
 
     if (pMovie_Track) {
