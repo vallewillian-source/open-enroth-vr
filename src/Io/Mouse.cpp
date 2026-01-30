@@ -102,12 +102,12 @@ void Io::Mouse::DrawCursor() {
         const auto dims = render->GetRenderDimensions();
         int vrX = 0, vrY = 0;
         bool vrClick = false;
-        
+
         // Check if we are in VR Menu Mode
         if (VRManager::Get().GetMenuMouseState(dims.w, dims.h, vrX, vrY, vrClick)) {
              // Update Mouse Position for Game Logic
              this->setPosition(Pointi(vrX, vrY));
-             
+
              // Handle Click
              if (vrClick) {
                  this->UI_OnMouseLeftClick();
@@ -132,12 +132,12 @@ void Io::Mouse::DrawCursor() {
              r2.x = vrX - r2.w / 2;
              r2.y = vrY - r2.h / 2;
              render->FillRect(r2, colorTable.Blue);
-             
+
              // Draw Picked Item if any (on top of cursor)
              if (pParty->pPickedItem.itemId != ITEM_NULL) {
                 DrawPickedItem();
              }
-             
+
              return; // Skip standard cursor logic
         }
     }

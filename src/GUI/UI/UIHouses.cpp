@@ -43,6 +43,7 @@
 
 #include "Io/Mouse.h"
 #include "Io/KeyboardInputHandler.h"
+#include "Engine/VR/VRManager.h"
 
 #include "Media/Audio/AudioPlayer.h"
 #include "Media/MediaPlayer.h"
@@ -383,6 +384,11 @@ bool enterHouse(HouseId uHouseID) {
     }
     playHouseSound(uHouseID, HOUSE_SOUND_GENERAL_GREETING);
     logger->info("Entrando na casa: {} (ID: {})", houseTable[uHouseID].name, std::to_underlying(uHouseID));
+
+    if (VRManager::Get().IsInitialized()) {
+        VRManager::Get().SetDebugHouseIndicator(true);
+    }
+
     return true;
 }
 

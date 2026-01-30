@@ -173,7 +173,7 @@ bool VRManager::Initialize() {
     // 3. Get System
     XrSystemGetInfo systemInfo = {XR_TYPE_SYSTEM_GET_INFO};
     systemInfo.formFactor = XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY;
-    
+
     if (!xrCheck(m_instance, xrGetSystem(m_instance, &systemInfo, &m_systemId), "xrGetSystem"))
         return false;
 
@@ -181,7 +181,7 @@ bool VRManager::Initialize() {
     PFN_xrGetOpenGLGraphicsRequirementsKHR pfnGetOpenGLGraphicsRequirementsKHR = nullptr;
     if (!xrCheck(m_instance, xrGetInstanceProcAddr(m_instance, "xrGetOpenGLGraphicsRequirementsKHR", (PFN_xrVoidFunction*)&pfnGetOpenGLGraphicsRequirementsKHR), "xrGetInstanceProcAddr(xrGetOpenGLGraphicsRequirementsKHR)"))
         return false;
-    
+
     if (pfnGetOpenGLGraphicsRequirementsKHR) {
         m_graphicsRequirements = {XR_TYPE_GRAPHICS_REQUIREMENTS_OPENGL_KHR};
         if (!xrCheck(m_instance, pfnGetOpenGLGraphicsRequirementsKHR(m_instance, m_systemId, &m_graphicsRequirements), "xrGetOpenGLGraphicsRequirementsKHR"))
@@ -232,6 +232,7 @@ void VRManager::InitOverlay(int width, int height) {
 void VRManager::BeginOverlayRender() {
     if (m_overlayFBO == 0) return;
 
+    m_isRenderingOverlay = true;
     glBindFramebuffer(GL_FRAMEBUFFER, m_overlayFBO);
     glViewport(0, 0, m_overlayWidth, m_overlayHeight);
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f); // Transparent background
@@ -239,6 +240,7 @@ void VRManager::BeginOverlayRender() {
 }
 
 void VRManager::EndOverlayRender() {
+    m_isRenderingOverlay = false;
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
@@ -381,7 +383,7 @@ uniform sampler2D screenTexture;
 void main() {
     vec4 col = texture(screenTexture, TexCoord);
     // Simple alpha threshold if needed, or rely on blending
-    // if (col.a < 0.01) discard; 
+    // if (col.a < 0.01) discard;
     FragColor = col;
 }
 )";
@@ -391,14 +393,14 @@ void VRManager::InitOverlayQuad() {
     // 1.5m away means we place it at Z = -1.5 (in OpenXR space)
     // But we will use Model matrix to position it.
     // So let's define it at origin, 1x1 size (from -0.5 to 0.5)
-    
+
     // X, Y, Z, U, V
     float vertices[] = {
         // positions          // texture coords
          0.5f,  0.375f, 0.0f,   1.0f, 1.0f, // Top Right (4:3 Aspect Ratio approx)
          0.5f, -0.375f, 0.0f,   1.0f, 0.0f, // Bottom Right
         -0.5f, -0.375f, 0.0f,   0.0f, 0.0f, // Bottom Left
-        -0.5f,  0.375f, 0.0f,   0.0f, 1.0f  // Top Left 
+        -0.5f,  0.375f, 0.0f,   0.0f, 1.0f  // Top Left
     };
     // Aspect Ratio 4:3 -> 1.0 width, 0.75 height.
 
@@ -507,14 +509,14 @@ void VRManager::RenderOverlay3D() {
     // Or we can just take Camera Rotation and apply it.
     // Camera looks down -Z. Quad needs to face +Z to be seen?
     // If quad is at (0,0,-1.5) in view space, and faces +Z, it is visible.
-    
+
     // Let's do it in View Space! It's easier.
     // Model Matrix in View Space = Translation(0, 0, -1.5).
     // Then we don't need 'view' matrix in shader?
     // Wait, shader uses projection * view * model.
     // If we define Model relative to World, we need full chain.
     // If we define Model relative to View, we pass Identity as View, and (View * Model) as Model.
-    
+
     // Let's stick to World Space logic for consistency.
     // Model Matrix = Translation(quadPos) * Rotation(camRot).
     // Rotation: we want the quad to have same orientation as camera.
@@ -522,7 +524,7 @@ void VRManager::RenderOverlay3D() {
     // So Quad is "facing away" from camera if we just copy rotation?
     // No, if Quad is at Z=-1.5 (local), and faces +Z (local), it faces origin (camera).
     // So yes, copying Camera Rotation is correct if Quad is defined to face +Z.
-    
+
     // Construct Model Matrix from Camera Matrix (invView), but move position.
     glm::mat4 model = invView;
     model[3] = glm::vec4(quadPos, 1.0f); // Set translation to new position
@@ -532,9 +534,9 @@ void VRManager::RenderOverlay3D() {
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glDisable(GL_DEPTH_TEST); // Overlay should be on top? Or check depth?
     // Usually HUD is on top.
-    
+
     glUseProgram(m_quadShader);
-    
+
     glUniformMatrix4fv(glGetUniformLocation(m_quadShader, "view"), 1, GL_FALSE, &view[0][0]);
     glUniformMatrix4fv(glGetUniformLocation(m_quadShader, "projection"), 1, GL_FALSE, &projection[0][0]);
     glUniformMatrix4fv(glGetUniformLocation(m_quadShader, "model"), 1, GL_FALSE, &model[0][0]);
@@ -545,6 +547,55 @@ void VRManager::RenderOverlay3D() {
 
     glBindVertexArray(m_quadVAO);
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+
+    // Debug House Indicator: Draw a white screen with monitor aspect ratio in the center
+    if (m_debugHouseIndicator) {
+        glEnable(GL_SCISSOR_TEST);
+        int w = m_views[m_currentViewIndex].width;
+        int h = m_views[m_currentViewIndex].height;
+
+        // Calculate aspect ratio based on monitor
+        int screenW = w / 2;
+        int screenH = (int)(screenW / 1.333f);
+
+        // DRASTIC CONVERGENCE CORRECTION
+        // The user reports screens are "stuck to the edges" (Left eye -> Left, Right eye -> Right).
+        // This means they are too far apart. We need to push them towards the nose.
+        // Left Eye (0): Move RIGHT (+)
+        // Right Eye (1): Move LEFT (-)
+        
+        // Start with the calculated FOV center
+        float angleCenterH = (m_xrViews[m_currentViewIndex].fov.angleRight + m_xrViews[m_currentViewIndex].fov.angleLeft) / 2.0f;
+        float angleWidthH = (m_xrViews[m_currentViewIndex].fov.angleRight - m_xrViews[m_currentViewIndex].fov.angleLeft);
+        float centerOffsetRatioH = angleCenterH / angleWidthH;
+        int pixelCenterH = (int)(w * (0.5f + centerOffsetRatioH));
+
+        float angleCenterV = (m_xrViews[m_currentViewIndex].fov.angleUp + m_xrViews[m_currentViewIndex].fov.angleDown) / 2.0f;
+        float angleWidthV = (m_xrViews[m_currentViewIndex].fov.angleUp - m_xrViews[m_currentViewIndex].fov.angleDown);
+        float centerOffsetRatioV = angleCenterV / angleWidthV;
+        int pixelCenterV = (int)(h * (0.5f - centerOffsetRatioV));
+
+        // Apply a DRASTIC offset to force them to the center
+        int convergenceOffset = w / 4; // 25% of the screen width
+        if (m_currentViewIndex == 0) {
+            pixelCenterH += convergenceOffset; // Push Left eye screen towards the RIGHT (nose)
+        } else {
+            pixelCenterH -= convergenceOffset; // Push Right eye screen towards the LEFT (nose)
+        }
+
+        glScissor(pixelCenterH - screenW / 2, pixelCenterV - screenH / 2, screenW, screenH);
+        glClearColor(1.0f, 1.0f, 1.0f, 1.0f); // White
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        // Debug Log to confirm values
+        static int frameCount = 0;
+        if (frameCount++ % 300 == 0 && logger) {
+            logger->info("VR Indicator: View {} | W: {} | CenterH: {} | ScissorX: {}", 
+                         m_currentViewIndex, w, pixelCenterH, pixelCenterH - screenW / 2);
+        }
+
+        glDisable(GL_SCISSOR_TEST);
+    }
 
     // Restore State
     glEnable(GL_DEPTH_TEST);
@@ -559,7 +610,7 @@ bool VRManager::CreateSession(HDC hDC, HGLRC hGLRC) {
     if (!hDC || !hGLRC) {
         SDL_Window* window = SDL_GL_GetCurrentWindow();
         HGLRC context = (HGLRC)SDL_GL_GetCurrentContext();
-        
+
         if (window && context) {
             hGLRC = context;
             #ifdef _WIN32
@@ -593,7 +644,7 @@ bool VRManager::CreateSession(HDC hDC, HGLRC hGLRC) {
     XrReferenceSpaceCreateInfo spaceInfo = {XR_TYPE_REFERENCE_SPACE_CREATE_INFO};
     spaceInfo.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_LOCAL; // Headset relative to startup
     spaceInfo.poseInReferenceSpace.orientation.w = 1.0f;
-    
+
     if (!xrCheck(m_instance, xrCreateReferenceSpace(m_session, &spaceInfo, &m_appSpace), "xrCreateReferenceSpace"))
         return false;
 
@@ -609,11 +660,11 @@ bool VRManager::CreateSession(HDC hDC, HGLRC hGLRC) {
 
         // We can keep the menu action set if we want to add specific menu actions later,
         // but for now we will rely on gameplay actions (move/trigger) even in menu.
-        // Or we can remove it entirely if unused. 
+        // Or we can remove it entirely if unused.
         // Let's keep it but empty for future use, or just remove the creation if it has no actions.
-        
+
         // Actually, let's just skip creating m_menuActionSet actions since we removed them.
-        
+
         // Gameplay Action Set
         XrActionSetCreateInfo gameplaySetInfo = {XR_TYPE_ACTION_SET_CREATE_INFO};
         std::strncpy(gameplaySetInfo.actionSetName, "gameplay", XR_MAX_ACTION_SET_NAME_SIZE - 1);
@@ -642,7 +693,7 @@ bool VRManager::CreateSession(HDC hDC, HGLRC hGLRC) {
             createAction("fly_down", "Fly Down", XR_ACTION_TYPE_FLOAT_INPUT, &m_actionFlyDown);
             createAction("quest", "Quest", XR_ACTION_TYPE_BOOLEAN_INPUT, &m_actionQuest);
             createAction("pass", "Pass", XR_ACTION_TYPE_BOOLEAN_INPUT, &m_actionPass);
-            
+
             // Bindings
             auto suggest = [&](const char* profile, std::vector<std::pair<XrAction, const char*>> bindings) {
                 XrPath profilePath = XR_NULL_PATH;
@@ -801,13 +852,12 @@ bool VRManager::BeginFrame() {
     XrFrameBeginInfo beginInfo = {XR_TYPE_FRAME_BEGIN_INFO};
     if (XR_FAILED(xrBeginFrame(m_session, &beginInfo))) return false;
 
-    if (!m_frameState.shouldRender) {
-        return false; // Just end frame later
-    }
+    m_frameBegun = true;
+    m_shouldRenderThisFrame = m_frameState.shouldRender;
 
     if (m_sessionState == XR_SESSION_STATE_FOCUSED || m_sessionState == XR_SESSION_STATE_VISIBLE) {
         std::vector<XrActiveActionSet> activeSets;
-        
+
         // We removed the menu action set for now, relying on gameplay actions.
         /*
         if (m_menuActionSet != XR_NULL_HANDLE) {
@@ -815,7 +865,7 @@ bool VRManager::BeginFrame() {
             activeSets.push_back(activeSet);
         }
         */
-        
+
         if (m_gameplayActionSet != XR_NULL_HANDLE) {
             XrActiveActionSet activeSet = {m_gameplayActionSet, XR_NULL_PATH};
             activeSets.push_back(activeSet);
@@ -849,12 +899,16 @@ bool VRManager::BeginFrame() {
 
     XrViewState viewState = {XR_TYPE_VIEW_STATE};
     uint32_t viewCountOutput;
-    if (XR_FAILED(xrLocateViews(m_session, &locateInfo, &viewState, (uint32_t)m_xrViews.size(), &viewCountOutput, m_xrViews.data()))) return false;
+    if (XR_FAILED(xrLocateViews(m_session, &locateInfo, &viewState, (uint32_t)m_xrViews.size(), &viewCountOutput, m_xrViews.data()))) {
+        m_shouldRenderThisFrame = false;
+        EndFrame();
+        return false;
+    }
 
     // Update Views
     for (uint32_t i = 0; i < viewCountOutput; i++) {
         m_views[i].view = m_xrViews[i];
-        
+
         // Convert Position/Orientation to GLM
         glm::quat orientation(m_xrViews[i].pose.orientation.w, m_xrViews[i].pose.orientation.x, m_xrViews[i].pose.orientation.y, m_xrViews[i].pose.orientation.z);
         glm::vec3 position(m_xrViews[i].pose.position.x, m_xrViews[i].pose.position.y, m_xrViews[i].pose.position.z);
@@ -923,6 +977,8 @@ bool VRManager::BeginFrame() {
 }
 
 void VRManager::EndFrame() {
+    if (!m_frameBegun) return;
+
     XrCompositionLayerProjection projectionLayer = {XR_TYPE_COMPOSITION_LAYER_PROJECTION};
     projectionLayer.space = m_appSpace;
     projectionLayer.viewCount = (uint32_t)m_projectionViews.size();
@@ -931,7 +987,9 @@ void VRManager::EndFrame() {
     XrCompositionLayerQuad quadLayer = {XR_TYPE_COMPOSITION_LAYER_QUAD};
     std::array<const XrCompositionLayerBaseHeader*, 2> layers = { (const XrCompositionLayerBaseHeader*)&projectionLayer, nullptr };
     uint32_t layerCount = 1;
-    if (m_overlayLayerEnabled && m_overlayLayerHasFrame && m_overlayLayerSwapchain != XR_NULL_HANDLE) {
+    if (!m_shouldRenderThisFrame) {
+        layerCount = 0;
+    } else if (m_overlayLayerEnabled && m_overlayLayerHasFrame && m_overlayLayerSwapchain != XR_NULL_HANDLE) {
         quadLayer.layerFlags = 0;
         quadLayer.eyeVisibility = XR_EYE_VISIBILITY_BOTH;
         if (m_overlayLayerAnchorPoseValid && m_appSpace != XR_NULL_HANDLE) {
@@ -963,7 +1021,7 @@ void VRManager::EndFrame() {
     endInfo.displayTime = m_frameState.predictedDisplayTime;
     endInfo.environmentBlendMode = m_environmentBlendMode;
     endInfo.layerCount = layerCount;
-    endInfo.layers = layers.data();
+    endInfo.layers = (layerCount > 0) ? layers.data() : nullptr;
 
     xrCheck(m_instance, xrEndFrame(m_session, &endInfo), "xrEndFrame");
 
@@ -976,6 +1034,9 @@ void VRManager::EndFrame() {
         glScissor(m_savedScissorBox[0], m_savedScissorBox[1], m_savedScissorBox[2], m_savedScissorBox[3]);
         m_savedScissorStateValid = false;
     }
+
+    m_frameBegun = false;
+    m_shouldRenderThisFrame = false;
 }
 
 unsigned int VRManager::AcquireSwapchainTexture(int viewIndex) {
@@ -990,19 +1051,19 @@ unsigned int VRManager::AcquireSwapchainTexture(int viewIndex) {
     if (XR_FAILED(xrWaitSwapchainImage(m_swapchains[viewIndex].handle, &waitInfo))) return 0;
 
     m_views[viewIndex].currentImageIndex = imageIndex;
-    
+
     // Bind to FBO
     if (m_views[viewIndex].framebufferId == 0) {
         glGenFramebuffers(1, &m_views[viewIndex].framebufferId);
     }
-    
+
     glBindFramebuffer(GL_FRAMEBUFFER, m_views[viewIndex].framebufferId);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_swapchains[viewIndex].images[imageIndex].image, 0);
-    
+
     // Depth Buffer
     static std::vector<GLuint> depthBuffers;
     if (depthBuffers.size() <= viewIndex) depthBuffers.resize(viewIndex + 1, 0);
-    
+
     if (depthBuffers[viewIndex] == 0) {
         glGenRenderbuffers(1, &depthBuffers[viewIndex]);
         glBindRenderbuffer(GL_RENDERBUFFER, depthBuffers[viewIndex]);
@@ -1036,7 +1097,7 @@ void VRManager::ReleaseSwapchainTexture(int viewIndex) {
 
     XrSwapchainImageReleaseInfo releaseInfo = {XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
     xrReleaseSwapchainImage(m_swapchains[viewIndex].handle, &releaseInfo);
-    
+
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
@@ -1172,7 +1233,7 @@ bool VRManager::GetMenuMouseState(int menuWidth, int menuHeight, int& outX, int&
     if (moveState.isActive) {
         // Move X
         m_menuCursorX += moveState.currentState.x * m_menuCursorSpeed;
-        
+
         // Move Y (Invert Stick Y because screen Y is down)
         m_menuCursorY -= moveState.currentState.y * m_menuCursorSpeed;
 

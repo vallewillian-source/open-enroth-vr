@@ -961,11 +961,11 @@ void OpenGLRenderer::_set_3d_modelview_matrix() {
         // Using pCamera3D->vCameraPos here is incorrect because it already contains the HMD offset (from Engine.cpp),
         // which would cancel out the stereoscopic effect.
         glm::vec3 worldOrigin(pParty->pos.x, pParty->pos.y, pParty->pos.z + pParty->eyeLevel);
-        
+
         // Convert yaw to radians
         // MM7 Yaw: 0-2048 = 0-360 degrees
         float yawRad = (float)(pCamera3D->_viewYaw * 2.0 * pi_double / 2048.0);
-        
+
         // Pass 0.0f for pitch because VRManager uses HMD pitch, and we want to avoid double-application
         // if game pitch is non-zero.
         viewmat = VRManager::Get().GetCurrentViewMatrix(worldOrigin, yawRad, 0.0f);

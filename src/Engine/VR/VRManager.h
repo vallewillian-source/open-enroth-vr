@@ -27,15 +27,16 @@ public:
 
     // Inicializa OpenXR Instance e System
     bool Initialize();
-    
+
     // Inicializa Sessão OpenXR usando contexto OpenGL existente
     bool CreateSession(HDC hDC, HGLRC hGLRC);
-    
+
     void Shutdown();
     void PollEvents();
 
     // Ciclo de Render
     bool BeginFrame(); // Retorna true se deve renderizar
+    bool ShouldRenderFrame() const { return m_shouldRenderThisFrame; }
     void EndFrame();
 
     struct VRView {
@@ -45,7 +46,7 @@ public:
         glm::mat4 projectionMatrix;
         int width;
         int height;
-        
+
         // Swapchain
         XrSwapchain swapchain;
         unsigned int currentImageIndex;
@@ -53,14 +54,14 @@ public:
     };
 
     const std::vector<VRView>& GetViews() const { return m_views; }
-    
+
     // Funções auxiliares para Swapchain
     unsigned int AcquireSwapchainTexture(int viewIndex);
     void ReleaseSwapchainTexture(int viewIndex);
 
     bool IsInitialized() const { return m_instance != XR_NULL_HANDLE; }
     bool IsSessionRunning() const { return m_sessionRunning; }
-    
+
     void SetIsRenderingVREye(bool value) { m_isRenderingVR = value; }
     bool IsRenderingVREye() const { return m_isRenderingVR; }
 
@@ -80,6 +81,7 @@ public:
     void EndOverlayRender();
     void CaptureScreenToOverlay(int srcWidth, int srcHeight);
     void RenderOverlay3D();
+    bool IsOverlayRenderActive() const { return m_isRenderingOverlay; }
 
     // Overlay layer (OpenXR quad layer) methods
     void InitOverlayLayer(int width, int height);
@@ -90,6 +92,9 @@ public:
 
     VRInputState GetVRInputState();
 
+    void SetDebugHouseIndicator(bool enabled) { m_debugHouseIndicator = enabled; }
+    bool GetDebugHouseIndicator() const { return m_debugHouseIndicator; }
+
 private:
     VRManager();
     ~VRManager();
@@ -98,14 +103,14 @@ private:
     bool GetSystem();
     bool CreateSwapchains();
     void DestroySwapchains();
-    
+
     // Overlay resources
     unsigned int m_overlayFBO = 0;
     unsigned int m_overlayTexture = 0;
     unsigned int m_overlayDepthBuffer = 0; // Might not need depth for 2D overlay, but good practice
     int m_overlayWidth = 0;
     int m_overlayHeight = 0;
-    
+
     // Overlay Quad resources
     unsigned int m_quadVAO = 0;
     unsigned int m_quadVBO = 0;
@@ -118,7 +123,7 @@ private:
     XrSession m_session = XR_NULL_HANDLE;
     XrSpace m_appSpace = XR_NULL_HANDLE;
     XrSpace m_viewSpace = XR_NULL_HANDLE;
-    
+
     bool m_sessionRunning = false;
     XrSessionState m_sessionState = XR_SESSION_STATE_UNKNOWN;
 
@@ -148,7 +153,7 @@ private:
 
     XrActionSet m_menuActionSet = XR_NULL_HANDLE;
     // Removed old raycasting actions
-    
+
     // Gameplay Actions
     XrActionSet m_gameplayActionSet = XR_NULL_HANDLE;
     XrAction m_actionMove = XR_NULL_HANDLE;
@@ -167,25 +172,29 @@ private:
 
     XrPath m_handLeftPath = XR_NULL_PATH;
     XrPath m_handRightPath = XR_NULL_PATH;
-    
+
     // New Menu Cursor State
     float m_menuCursorX = 0.0f;
     float m_menuCursorY = 0.0f;
     float m_menuCursorSpeed = 4.0f; // Pixels per frame factor (adjust as needed)
     bool m_menuCursorInitialized = false;
     bool m_menuSelectPressedPrev = false;
-    
+
     // Frame State
     XrFrameState m_frameState = {XR_TYPE_FRAME_STATE};
     std::vector<VRView> m_views;
     std::vector<XrView> m_xrViews; // Raw views from OpenXR
     std::vector<XrCompositionLayerProjectionView> m_projectionViews;
     XrEnvironmentBlendMode m_environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
-    
+
+    bool m_frameBegun = false;
+    bool m_shouldRenderThisFrame = false;
     bool m_isRenderingVR = false;
     int m_currentViewIndex = 0;
 
+    bool m_debugHouseIndicator = false;
     bool m_savedScissorStateValid = false;
     bool m_savedScissorEnabled = false;
     int m_savedScissorBox[4] = {0, 0, 0, 0};
+    bool m_isRenderingOverlay = false;
 };

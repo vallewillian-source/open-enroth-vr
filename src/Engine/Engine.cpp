@@ -1,4 +1,5 @@
 #include <cstring>
+#include <cstdlib>
 #include <string>
 #include <algorithm>
 #include <memory>
@@ -148,7 +149,7 @@ void Engine::drawWorld() {
         // Update View Matrix with HMD rotation (Stage 2 fix)
         // Convert party yaw to radians
         float yawRad = pParty->_viewYaw * (2.0f * 3.14159265359f / 2048.0f);
-        
+
         // Get VR View Matrix (includes HMD rotation + Party Yaw + Party Pos)
         // Fix: Add eyeLevel to base position so the camera isn't at floor level
         glm::mat4 vrView = VRManager::Get().GetCurrentViewMatrix(
@@ -156,7 +157,7 @@ void Engine::drawWorld() {
             yawRad,
             0.0f // Pitch ignored by VRManager (uses HMD pitch)
         );
-        
+
         pCamera3D->SetViewMatrixVR(vrView);
     }
 
@@ -217,45 +218,46 @@ void Engine::drawHUD() {
 
 //----- (0044103C) --------------------------------------------------------
 void Engine::Draw() {
-    if (VRManager::Get().IsInitialized()) {
-        // 1. Initialize Overlay if needed (Lazy Init)
-        // Use standard 640x480 resolution for MM7 UI
-        VRManager::Get().InitOverlay(640, 480);
+    drawWorld();
+    drawHUD();
 
-        // 2. Render 2D UI to Texture
-        VRManager::Get().BeginOverlayRender();
-        // We need to call drawHUD to render the UI. 
-        // drawHUD sets up 2D mode internally.
-        drawHUD(); 
-        VRManager::Get().EndOverlayRender();
+    if (VRManager::Get().IsInitialized()) {
+        if (std::getenv("OPENENROTH_VR_DEBUG_OVERLAY_MATCH_RENDER_DIMS") != nullptr) {
+            const auto dims = render->GetRenderDimensions();
+            VRManager::Get().InitOverlay(dims.w, dims.h);
+        } else {
+            VRManager::Get().InitOverlay(640, 480);
+        }
+
+        const auto dims = render->GetRenderDimensions();
+        render->BindRenderFramebufferForRead();
+        VRManager::Get().CaptureScreenToOverlay(dims.w, dims.h);
 
         if (VRManager::Get().BeginFrame()) {
-            // Render VR Views
-            for (int i = 0; i < 2; ++i) {
-                unsigned int textureId = VRManager::Get().AcquireSwapchainTexture(i);
-                if (textureId != 0) {
-                    VRManager::Get().BindSwapchainFramebuffer(i);
+            if (VRManager::Get().ShouldRenderFrame()) {
+                for (int i = 0; i < 2; ++i) {
+                    unsigned int framebufferId = VRManager::Get().AcquireSwapchainTexture(i);
+                    if (framebufferId != 0) {
+                        VRManager::Get().BindSwapchainFramebuffer(i);
 
-                    render->ClearTarget(colorTable.Black);
+                        render->ClearTarget(colorTable.Black);
 
-                    VRManager::Get().SetCurrentViewIndex(i);
-                    VRManager::Get().SetIsRenderingVREye(true);
+                        VRManager::Get().SetCurrentViewIndex(i);
+                        VRManager::Get().SetIsRenderingVREye(true);
 
-                    drawWorld();
-                    
-                    // Render the 2D Overlay in 3D space
-                    VRManager::Get().RenderOverlay3D();
+                        drawWorld();
 
-                    VRManager::Get().SetIsRenderingVREye(false);
-                    VRManager::Get().ReleaseSwapchainTexture(i);
+                        VRManager::Get().RenderOverlay3D();
+
+                        VRManager::Get().SetIsRenderingVREye(false);
+                        VRManager::Get().ReleaseSwapchainTexture(i);
+                    }
                 }
             }
             VRManager::Get().EndFrame();
         }
     }
 
-    drawWorld();
-    drawHUD();
     render->flushAndScale();
     drawOverlay();
     render->swapBuffers();

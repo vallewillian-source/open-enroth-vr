@@ -115,7 +115,7 @@ void Io::KeyboardInputHandler::GenerateActions(bool isPaused) {
     bool resettimer = true;
     for (InputAction action : allInputActions()) {
         bool isTriggered = false;
-        
+
         // Check keyboard/gamepad
         bool keyDown = false;
         bool keyPressed = false;
