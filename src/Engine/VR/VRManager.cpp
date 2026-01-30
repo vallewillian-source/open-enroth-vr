@@ -584,13 +584,52 @@ void VRManager::RenderOverlay3D() {
         }
 
         glScissor(pixelCenterH - screenW / 2, pixelCenterV - screenH / 2, screenW, screenH);
-        glClearColor(1.0f, 1.0f, 1.0f, 1.0f); // White
-        glClear(GL_COLOR_BUFFER_BIT);
+        
+        // MVP: Instead of clear white, we use the captured monitor screen texture!
+        // This is a minimal change: we just reuse the RenderOverlay3D logic here 
+        // but with a fixed screen-space position (scissor) instead of 3D world position.
+        
+        if (m_quadShader != 0 && m_overlayTexture != 0) {
+            glDisable(GL_DEPTH_TEST);
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            
+            glUseProgram(m_quadShader);
+            
+            // For screen-space quad, we can just use identity matrices or a simple ortho
+            glm::mat4 identity = glm::mat4(1.0f);
+            
+            // We want to map the quad to the scissor area. 
+            // However, it's easier to just draw a full-screen quad and let the scissor do the work.
+            // But the quad is defined in [-0.5, 0.5] range.
+            
+            // Projection: Ortho that matches the view dimensions
+            glm::mat4 ortho = glm::ortho(0.0f, (float)w, 0.0f, (float)h);
+            
+            // Model: Scale to screenW/screenH and translate to pixelCenterH/pixelCenterV
+            glm::mat4 model = glm::translate(identity, glm::vec3((float)pixelCenterH, (float)pixelCenterV, 0.0f));
+            model = glm::scale(model, glm::vec3((float)screenW, (float)screenH, 1.0f));
+            
+            glUniformMatrix4fv(glGetUniformLocation(m_quadShader, "view"), 1, GL_FALSE, &identity[0][0]);
+            glUniformMatrix4fv(glGetUniformLocation(m_quadShader, "projection"), 1, GL_FALSE, &ortho[0][0]);
+            glUniformMatrix4fv(glGetUniformLocation(m_quadShader, "model"), 1, GL_FALSE, &model[0][0]);
+            
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, m_overlayTexture);
+            glUniform1i(glGetUniformLocation(m_quadShader, "screenTexture"), 0);
+            
+            glBindVertexArray(m_quadVAO);
+            glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+        } else {
+            // Fallback to white if shaders aren't ready
+            glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT);
+        }
 
         // Debug Log to confirm values
         static int frameCount = 0;
         if (frameCount++ % 300 == 0 && logger) {
-            logger->info("VR Indicator: View {} | W: {} | CenterH: {} | ScissorX: {}", 
+            logger->info("VR Indicator (House Mode): View {} | W: {} | CenterH: {} | ScissorX: {}", 
                          m_currentViewIndex, w, pixelCenterH, pixelCenterH - screenW / 2);
         }
 
