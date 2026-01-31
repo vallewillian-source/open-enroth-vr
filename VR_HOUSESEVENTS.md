@@ -52,10 +52,34 @@ A saída ocorre quando o jogador clica no botão "Exit" ou pressiona Escape.
     - `current_screen_type` volta para `SCREEN_GAME`.
     - O tempo do jogo é retomado.
 
-## 4. Considerações para o Port VR
+## 4. Implementação da Tela 2D em VR (Virtual Monitor)
 
-Para portar este sistema para VR, seguiremos o padrão implementado no `GameMenu`:
-1. **Renderização**: Utilizar `XrCompositionLayerQuad` para projetar a tela 2D da casa no espaço 3D à frente do jogador.
-2. **Cursor**: Mapear o cursor do mouse para o analógico esquerdo (ou movimento da mão).
-3. **Seleção**: Utilizar os triggers dos controladores para simular o clique do mouse.
-4. **Logs de Depuração**: Foram adicionados logs em `enterHouse` e `houseDialogPressEscape` para rastrear os IDs das casas e validar o mapeamento de eventos.
+Para integrar as interfaces 2D das casas na experiência VR, implementamos um sistema de "Monitor Virtual" que ancora a tela no espaço 3D.
+
+### Fluxo de Renderização
+A renderização da interface em VR ocorre em três etapas principais:
+
+1. **Captura do Frame (Blit):**
+   - No loop principal em [Engine.cpp](file:///c:/Users/Usuário/www/mm7_vr/src/Engine/Engine.cpp), a função `CaptureScreenToOverlay` é chamada.
+   - Ela utiliza `glBlitFramebuffer` para copiar o conteúdo do backbuffer (onde a interface 2D padrão é desenhada) para uma textura dedicada `m_overlayTexture` no `VRManager`.
+
+2. **Ancoragem no Mundo (World-Locking):**
+   - Ao detectar que `current_screen_type == SCREEN_HOUSE`, o `VRManager` ativa o `m_debugHouseIndicator`.
+   - Na primeira execução dentro da casa, o sistema captura a posição e orientação atual do HMD via `m_views[m_currentViewIndex].viewMatrix`.
+   - A tela é posicionada a **2.5 metros** à frente da posição capturada, criando um ponto fixo no espaço 3D ([VRManager.cpp:L570](file:///c:/Users/Usuário/www/mm7_vr/src/Engine/VR/VRManager.cpp#L570)).
+
+3. **Projeção Estéreo e Scissor:**
+   - A cada frame de cada olho, a posição 3D da tela é projetada de volta para coordenadas de tela (NDC) usando as matrizes de visão e projeção específicas do olho.
+   - Utilizamos `glScissor` para definir a área de exibição e desenhamos a textura capturada usando uma projeção ortogonal ([VRManager.cpp:L606-612](file:///c:/Users/Usuário/www/mm7_vr/src/Engine/VR/VRManager.cpp#L606-612)).
+   - Isso garante que cada olho veja a tela com o deslocamento correto, proporcionando profundidade 3D natural e conforto visual (convergência estéreo).
+
+### Controle de Estado
+- **Entrada**: `SetDebugHouseIndicator(true)` reseta `m_housePoseInitialized`, forçando a captura de uma nova âncora baseada na posição atual do jogador ao entrar na casa.
+- **Saída**: Ao retornar para `SCREEN_GAME`, o indicador é desativado, removendo a tela 2D da visão VR.
+
+## 5. Próximos Passos (VR Port)
+
+Seguiremos estas diretrizes para refinamento:
+1. **Cursor**: Mapear o cursor do mouse para o analógico esquerdo (ou movimento da mão).
+2. **Seleção**: Utilizar os triggers dos controladores para simular o clique do mouse.
+3. **Logs de Depuração**: Foram adicionados logs em `enterHouse` e `houseDialogPressEscape` para rastrear os IDs das casas e validar o mapeamento de eventos.
