@@ -95,7 +95,15 @@ public:
     void SetDebugHouseIndicator(bool enabled);
     bool GetDebugHouseIndicator() const { return m_debugHouseIndicator; }
 
+    // Dialogue Text HUD
+    void SetDialogueText(const std::string& text);
+    const std::string& GetDialogueText() const { return m_dialogueText; }
+    void ClearDialogueText();
+
+    void RenderDialogueHUD();
+
 private:
+    void UpdateDialogueTexture();
     VRManager();
     ~VRManager();
 
@@ -215,6 +223,12 @@ private:
     float m_menuCursorSpeed = 4.0f; // Pixels per frame factor (adjust as needed)
     bool m_menuCursorInitialized = false;
     bool m_menuSelectPressedPrev = false;
+
+    // Dialogue HUD
+    std::string m_dialogueText;
+    unsigned int m_dialogueFontTexture = 0; // Future use if we want a dedicated font
+    int m_dialogueTextureWidth = 0;
+    int m_dialogueTextureHeight = 0;
 
     // Frame State
     XrFrameState m_frameState = {XR_TYPE_FRAME_STATE};

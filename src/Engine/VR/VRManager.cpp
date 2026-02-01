@@ -8,8 +8,17 @@
 #include <cstring>
 #include <cstdlib>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
 #include <cmath>
+#include <iostream>
+#include <sstream>
 
+#include "Engine/Engine.h"
+#include "Engine/EngineGlobals.h"
+#include "Engine/AssetsManager.h"
+#include "Engine/Graphics/Renderer/Renderer.h"
+#include "Engine/Graphics/Image.h"
+#include "GUI/GUIFont.h"
 #include "Engine/Graphics/Camera.h"
 #include "Library/Logger/Logger.h"
 
@@ -127,6 +136,92 @@ void VRManager::SetDebugHouseIndicator(bool enabled) {
         }
     }
     m_debugHouseIndicator = enabled;
+}
+
+void VRManager::UpdateDialogueTexture() {
+    if (m_dialogueText.empty()) return;
+
+    std::string textToRender = m_dialogueText;
+    
+    // Get font - we use the same font as GUIWindow::DrawDialoguePanel
+    if (!assets || !assets->pFontArrus) {
+        if (logger) logger->error("VRManager: Assets ou pFontArrus não encontrados!");
+        return;
+    }
+    GUIFont* font = assets->pFontArrus.get();
+
+    int maxWidth = 600; // Fixed width for VR HUD panel
+    int indent = 10;
+    
+    // Check if we need a smaller font (like in GUIWindow)
+    int textHeight = font->CalcTextHeight(textToRender, maxWidth, indent) + 20;
+    if (textHeight > 400) { // arbitrary limit for VR panel
+        if (assets->pFontCreate) {
+            font = assets->pFontCreate.get();
+            textHeight = font->CalcTextHeight(textToRender, maxWidth, indent) + 20;
+        }
+    }
+
+    std::string wrapped = font->WrapText(textToRender, maxWidth, indent);
+    
+    m_dialogueTextureWidth = maxWidth;
+    m_dialogueTextureHeight = textHeight;
+
+    if (logger) {
+        logger->info("VRManager: Atualizando textura de diálogo. Dimensões: {}x{}", m_dialogueTextureWidth, m_dialogueTextureHeight);
+    }
+
+    // Create buffer
+    std::vector<Color> buffer(m_dialogueTextureWidth * m_dialogueTextureHeight, Color(0, 0, 0, 180)); // Fundo preto semi-transparente direto no buffer
+
+    // Render lines
+    std::istringstream stream(wrapped);
+    std::string line;
+    int y = 10;
+    while (std::getline(stream, line)) {
+        if (y + font->GetHeight() > m_dialogueTextureHeight) break;
+        font->DrawTextLineToBuff(colorTable.White, colorTable.Black, &buffer[y * m_dialogueTextureWidth + indent], line, m_dialogueTextureWidth);
+        y += font->GetHeight() - 3; // Match CalcTextHeight logic
+    }
+
+    // Upload to texture
+    if (m_dialogueFontTexture == 0) {
+        glGenTextures(1, &m_dialogueFontTexture);
+    }
+    glBindTexture(GL_TEXTURE_2D, m_dialogueFontTexture);
+
+    // Flip buffer vertically for OpenGL (which expects bottom-to-top)
+    std::vector<Color> flippedBuffer(m_dialogueTextureWidth * m_dialogueTextureHeight);
+    for (int row = 0; row < m_dialogueTextureHeight; ++row) {
+        std::memcpy(&flippedBuffer[(m_dialogueTextureHeight - 1 - row) * m_dialogueTextureWidth],
+                    &buffer[row * m_dialogueTextureWidth],
+                    m_dialogueTextureWidth * sizeof(Color));
+    }
+
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m_dialogueTextureWidth, m_dialogueTextureHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, flippedBuffer.data());
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+void VRManager::ClearDialogueText() {
+    if (!m_dialogueText.empty()) {
+        m_dialogueText.clear();
+        UpdateDialogueTexture();
+    }
+}
+
+void VRManager::SetDialogueText(const std::string& text) {
+    if (m_dialogueText == text) return;
+    
+    if (logger) {
+        logger->info("VRManager: Recebendo novo texto de diálogo: '{}'", text);
+    }
+
+    m_dialogueText = text;
+    UpdateDialogueTexture();
 }
 
 VRManager& VRManager::Get() {
@@ -950,6 +1045,123 @@ void VRManager::RenderDebugController() {
     }
 }
 
+void VRManager::RenderDialogueHUD() {
+    if (m_dialogueText.empty()) return;
+
+    static bool loggedHud = false;
+
+    GLboolean prevBlend = GL_FALSE;
+    GLboolean prevDepthTest = GL_FALSE;
+    GLboolean prevCullFace = GL_FALSE;
+    GLboolean prevScissor = GL_FALSE;
+    glGetBooleanv(GL_BLEND, &prevBlend);
+    glGetBooleanv(GL_DEPTH_TEST, &prevDepthTest);
+    glGetBooleanv(GL_CULL_FACE, &prevCullFace);
+    glGetBooleanv(GL_SCISSOR_TEST, &prevScissor);
+
+    if (m_dialogueFontTexture == 0) return;
+    
+    // Use current view parameters
+    glViewport(0, 0, m_views[m_currentViewIndex].width, m_views[m_currentViewIndex].height);
+    glm::mat4 view = m_views[m_currentViewIndex].viewMatrix;
+
+    float left = tan(m_xrViews[m_currentViewIndex].fov.angleLeft);
+    float right = tan(m_xrViews[m_currentViewIndex].fov.angleRight);
+    float down = tan(m_xrViews[m_currentViewIndex].fov.angleDown);
+    float up = tan(m_xrViews[m_currentViewIndex].fov.angleUp);
+    float nearZ = 0.05f;
+    float farZ = 100.0f;
+    
+    glm::mat4 hudProjection(0.0f);
+    hudProjection[0][0] = 2.0f / (right - left);
+    hudProjection[1][1] = 2.0f / (up - down);
+    hudProjection[2][0] = (right + left) / (right - left);
+    hudProjection[2][1] = (up + down) / (up - down);
+    hudProjection[2][2] = -(farZ + nearZ) / (farZ - nearZ);
+    hudProjection[2][3] = -1.0f;
+    hudProjection[3][2] = -(2.0f * farZ * nearZ) / (farZ - nearZ);
+
+    // Head-locked position: 1.5m in front, 0.2m down
+    glm::mat4 invView = glm::inverse(view);
+    glm::vec3 camPos = glm::vec3(invView[3]);
+    glm::vec3 camFwd = glm::vec3(invView * glm::vec4(0, 0, -1, 0));
+    glm::vec3 camUp = glm::vec3(invView * glm::vec4(0, 1, 0, 0));
+    
+    // HUD Pos: um pouco mais longe e centralizado para garantir visibilidade
+    glm::vec3 hudPos = camPos + camFwd * 1.5f - camUp * 0.2f; 
+
+    if (!loggedHud && logger) {
+        glm::vec4 clipPos = hudProjection * view * glm::vec4(hudPos, 1.0f);
+        glm::vec3 ndc = glm::vec3(clipPos) / clipPos.w;
+        logger->info("VRManager: RenderDialogueHUD ativo. viewIndex={}, texId={}, texSize={}x{}, HUD NDC=({}, {}, {}), w={}",
+                     m_currentViewIndex,
+                     (unsigned int)m_dialogueFontTexture,
+                     m_dialogueTextureWidth, m_dialogueTextureHeight,
+                     ndc.x, ndc.y, ndc.z, clipPos.w);
+        loggedHud = true;
+    }
+
+    // Background panel scale based on texture aspect ratio
+    float aspect = (float)m_dialogueTextureWidth / (float)m_dialogueTextureHeight;
+    float panelWidth = 1.2f; // Um pouco maior para MVP
+    float panelHeight = panelWidth / aspect;
+
+    glm::mat4 model = invView;
+    model[3] = glm::vec4(hudPos, 1.0f);
+    
+    glDisable(GL_SCISSOR_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE); // Garantir que não estamos vendo o verso
+
+    // 1. Render background (semi-transparent black) - usando o shader de debug
+    InitDebugResources();
+    if (m_debugShader != 0 && m_quadVAO != 0) {
+        glUseProgram(m_debugShader);
+        glUniformMatrix4fv(glGetUniformLocation(m_debugShader, "view"), 1, GL_FALSE, &view[0][0]);
+        glUniformMatrix4fv(glGetUniformLocation(m_debugShader, "projection"), 1, GL_FALSE, &hudProjection[0][0]);
+        
+        glm::mat4 backgroundModel = glm::scale(model, glm::vec3(panelWidth + 0.02f, panelHeight + 0.02f, 1.0f));
+        glUniformMatrix4fv(glGetUniformLocation(m_debugShader, "model"), 1, GL_FALSE, &backgroundModel[0][0]);
+        glUniform4f(glGetUniformLocation(m_debugShader, "color"), 0.1f, 0.1f, 0.1f, 0.9f); 
+
+        glBindVertexArray(m_quadVAO);
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+        GLenum err = glGetError();
+        if (err != GL_NO_ERROR && logger) {
+            logger->error("VRManager: RenderDialogueHUD background gl error: 0x{:x}", err);
+        }
+    }
+
+    // 2. Render text texture - usando o quad shader de overlay
+    InitOverlayQuad(); 
+    if (m_quadShader != 0 && m_quadVAO != 0) {
+        glUseProgram(m_quadShader);
+        glUniformMatrix4fv(glGetUniformLocation(m_quadShader, "view"), 1, GL_FALSE, &view[0][0]);
+        glUniformMatrix4fv(glGetUniformLocation(m_quadShader, "projection"), 1, GL_FALSE, &hudProjection[0][0]);
+        
+        glm::mat4 textModel = glm::scale(model, glm::vec3(panelWidth, panelHeight, 1.0f));
+        glUniformMatrix4fv(glGetUniformLocation(m_quadShader, "model"), 1, GL_FALSE, &textModel[0][0]);
+
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, m_dialogueFontTexture);
+        glUniform1i(glGetUniformLocation(m_quadShader, "screenTexture"), 0);
+
+        glBindVertexArray(m_quadVAO);
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+        GLenum err = glGetError();
+        if (err != GL_NO_ERROR && logger) {
+            logger->error("VRManager: RenderDialogueHUD text gl error: 0x{:x}", err);
+        }
+    }
+
+    if (prevScissor) glEnable(GL_SCISSOR_TEST); else glDisable(GL_SCISSOR_TEST);
+    if (prevCullFace) glEnable(GL_CULL_FACE); else glDisable(GL_CULL_FACE);
+    if (prevDepthTest) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
+    if (prevBlend) glEnable(GL_BLEND); else glDisable(GL_BLEND);
+}
+
 void VRManager::RenderOverlay3D() {
     if (m_quadShader == 0 || m_overlayTexture == 0) return;
 
@@ -1710,6 +1922,11 @@ void VRManager::Shutdown() {
     if (m_instance != XR_NULL_HANDLE) {
         xrDestroyInstance(m_instance);
         m_instance = XR_NULL_HANDLE;
+    }
+
+    if (m_dialogueFontTexture != 0) {
+        glDeleteTextures(1, &m_dialogueFontTexture);
+        m_dialogueFontTexture = 0;
     }
 }
 

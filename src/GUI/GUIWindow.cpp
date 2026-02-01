@@ -29,6 +29,7 @@
 #include "Engine/Tables/IconFrameTable.h"
 #include "Engine/Time/Timer.h"
 #include "Engine/MapInfo.h"
+#include "Engine/VR/VRManager.h"
 
 #include "GUI/GUIButton.h"
 #include "GUI/GUIFont.h"
@@ -334,8 +335,12 @@ void GUIWindow::DrawTitleText(GUIFont *pFont, int horizontalMargin, int vertical
 }
 
 void GUIWindow::DrawDialoguePanel(std::string_view text) {
-    if (text.empty())
+    if (text.empty()) {
+        VRManager::Get().ClearDialogueText();
         return;
+    }
+
+    VRManager::Get().SetDialogueText(std::string(text));
 
     int frameWidth = pViewport.w;
     int indent = 12;
