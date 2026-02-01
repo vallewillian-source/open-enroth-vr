@@ -17,6 +17,8 @@
 #include "Engine/VR/VRManager.h"
 #include "Engine/Graphics/Viewport.h"
 
+#include "Library/Logger/Logger.h"
+
 #include "GUI/GUIFont.h"
 #include "GUI/GUIButton.h"
 #include "GUI/GUIMessageQueue.h"
@@ -300,26 +302,42 @@ void GUIWindow_Dialogue::Update() {
         index++;
     }
 
-    if (index) {
-        int v45 = (SIDE_TEXT_BOX_BODY_TEXT_HEIGHT - all_text_height) / index;
-        if (v45 > SIDE_TEXT_BOX_MAX_SPACING)
-            v45 = SIDE_TEXT_BOX_MAX_SPACING;
-        int v42 = (SIDE_TEXT_BOX_BODY_TEXT_HEIGHT - v45 * index - all_text_height) / 2 - v45 / 2 + SIDE_TEXT_BOX_BODY_TEXT_OFFSET;
-        for (int i = pDialogueWindow->pStartingPosActiveItem; i < pDialogueWindow->pNumPresenceButton + pDialogueWindow->pStartingPosActiveItem; ++i) {
-            GUIButton *pButton = pDialogueWindow->GetControl(i);
-            if (!pButton)
-                break;
-            pButton->rect.y = v45 + v42;
-            int pTextHeight = assets->pFontArrus->CalcTextHeight(pButton->sLabel, window.w, 0);
-            pButton->rect.h = pTextHeight + 1;
-            v42 = pButton->rect.y + pTextHeight - 1;
-            Color pTextColor = ui_game_dialogue_option_normal_color;
-            if (pDialogueWindow->pCurrentPosActiveItem == i) {
-                pTextColor = ui_game_dialogue_option_highlight_color;
+        if (index) {
+            std::vector<VRManager::DialogueOption> vrOptions;
+            int v45 = (SIDE_TEXT_BOX_BODY_TEXT_HEIGHT - all_text_height) / index;
+            if (v45 > SIDE_TEXT_BOX_MAX_SPACING)
+                v45 = SIDE_TEXT_BOX_MAX_SPACING;
+            int v42 = (SIDE_TEXT_BOX_BODY_TEXT_HEIGHT - v45 * index - all_text_height) / 2 - v45 / 2 + SIDE_TEXT_BOX_BODY_TEXT_OFFSET;
+            for (int i = pDialogueWindow->pStartingPosActiveItem; i < pDialogueWindow->pNumPresenceButton + pDialogueWindow->pStartingPosActiveItem; ++i) {
+                GUIButton *pButton = pDialogueWindow->GetControl(i);
+                if (!pButton)
+                    break;
+                
+                // Collect for VR
+                if (!pButton->sLabel.empty()) {
+                    vrOptions.push_back({pButton->sLabel, (int)pButton->msg_param, (int)pButton->msg});
+                }
+
+                pButton->rect.y = v45 + v42;
+                int pTextHeight = assets->pFontArrus->CalcTextHeight(pButton->sLabel, window.w, 0);
+                pButton->rect.h = pTextHeight + 1;
+                v42 = pButton->rect.y + pTextHeight - 1;
+                Color pTextColor = ui_game_dialogue_option_normal_color;
+                if (pDialogueWindow->pCurrentPosActiveItem == i) {
+                    pTextColor = ui_game_dialogue_option_highlight_color;
+                }
+                DrawTitleText(assets->pFontArrus.get(), 0, pButton->rect.y, pTextColor, pButton->sLabel, 3, window);
             }
-            DrawTitleText(assets->pFontArrus.get(), 0, pButton->rect.y, pTextColor, pButton->sLabel, 3, window);
+            if (logger) {
+                logger->info("UIDialogue: Passando {} opções para VRManager", vrOptions.size());
+            }
+            VRManager::Get().SetDialogueOptions(vrOptions);
+        } else {
+            if (logger) {
+                logger->info("UIDialogue: Nenhuma opção encontrada, limpando menu VR");
+            }
+            VRManager::Get().ClearDialogueOptions();
         }
-    }
     render->DrawQuad2D(ui_exit_cancel_button_background, {471, 445});
 }
 

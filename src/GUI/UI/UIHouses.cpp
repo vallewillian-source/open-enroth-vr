@@ -846,11 +846,15 @@ void GUIWindow_House::drawOptions(std::vector<std::string> &optionsText, Color s
         offset += (SIDE_TEXT_BOX_BODY_TEXT_HEIGHT - topOptionShift - spacing * activeOptions - allTextHeight) / 2 - spacing / 2 + SIDE_TEXT_BOX_BODY_TEXT_OFFSET;
     }
 
+    std::vector<VRManager::DialogueOption> vrOptions;
     for (int i = 0; i < pDialogueWindow->pNumPresenceButton; ++i) {
         int buttonIndex = i + pDialogueWindow->pStartingPosActiveItem;
         GUIButton *button = pDialogueWindow->GetControl(buttonIndex);
 
         if (!optionsText[i].empty()) {
+            // Collect for VR
+            vrOptions.push_back({optionsText[i], (int)button->msg_param, (int)button->msg});
+
             Color textColor = (pDialogueWindow->pCurrentPosActiveItem == buttonIndex) ? selectColor : colorTable.White;
             int textHeight = assets->pFontArrus->CalcTextHeight(optionsText[i], window.w, 0);
             button->rect.y = spacing + offset;
@@ -868,6 +872,18 @@ void GUIWindow_House::drawOptions(std::vector<std::string> &optionsText, Color s
             button->sLabel.clear();
         }
     }
+
+    if (!vrOptions.empty()) {
+            if (logger) {
+                logger->info("UIHouses: Passando {} opções para VRManager", vrOptions.size());
+            }
+            VRManager::Get().SetDialogueOptions(vrOptions);
+        } else {
+            if (logger) {
+                logger->info("UIHouses: Nenhuma opção VR encontrada, limpando menu VR");
+            }
+            VRManager::Get().ClearDialogueOptions();
+        }
 }
 
 void GUIWindow_House::houseDialogManager() {
@@ -1108,6 +1124,7 @@ void GUIWindow_House::Release() {
     }
 
     VRManager::Get().ClearDialogueText();
+    VRManager::Get().ClearDialogueOptions();
     GUIWindow::Release();
 }
 

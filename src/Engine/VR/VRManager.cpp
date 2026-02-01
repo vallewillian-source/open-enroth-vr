@@ -19,7 +19,9 @@
 #include "Engine/Graphics/Renderer/Renderer.h"
 #include "Engine/Graphics/Image.h"
 #include "GUI/GUIFont.h"
+#include "GUI/GUIEnums.h"
 #include "Engine/Graphics/Camera.h"
+#include "GUI/GUIMessageQueue.h"
 #include "Library/Logger/Logger.h"
 
 static std::string_view xrResultName(XrResult result) {
@@ -211,6 +213,180 @@ void VRManager::ClearDialogueText() {
         m_dialogueText.clear();
         UpdateDialogueTexture();
     }
+}
+
+void VRManager::SetDialogueOptions(const std::vector<DialogueOption>& options) {
+    if (m_dialogueOptions == options) {
+        return;
+    }
+
+    if (logger) {
+        logger->info("VRManager: SetDialogueOptions mudou ({} opções)", options.size());
+        for (size_t i = 0; i < options.size(); ++i) {
+            logger->info("  Opção {}: '{}' (ID: {}, Msg: {})", i, options[i].text, options[i].id, options[i].msg);
+        }
+    }
+    m_dialogueOptions = options;
+    m_selectedOptionIndex = 0;
+    UpdateDialogueMenuTexture();
+}
+
+void VRManager::ClearDialogueOptions() {
+    if (!m_dialogueOptions.empty() && logger) {
+        logger->info("VRManager: ClearDialogueOptions chamada (limpando {} opções)", m_dialogueOptions.size());
+    }
+    m_dialogueOptions.clear();
+    m_selectedOptionIndex = 0;
+}
+
+void VRManager::UpdateDialogueMenuTexture() {
+    if (m_dialogueOptions.empty()) {
+        if (logger) logger->info("VRManager: UpdateDialogueMenuTexture ignorada (sem opções)");
+        return;
+    }
+
+    if (!assets || !assets->pFontArrus) {
+        if (logger) logger->error("VRManager: UpdateDialogueMenuTexture falhou: assets ou pFontArrus nulo");
+        return;
+    }
+    GUIFont* font = assets->pFontArrus.get();
+
+    int maxWidth = 400; // Menu is narrower than text HUD
+    int indent = 10;
+    int itemHeight = font->GetHeight() + 5;
+    int totalHeight = (int)m_dialogueOptions.size() * itemHeight + 20;
+
+    m_menuTextureWidth = maxWidth;
+    m_menuTextureHeight = totalHeight;
+
+    if (logger) {
+        logger->info("VRManager: Atualizando textura do menu. Dimensões: {}x{}, Itens: {}", 
+                     m_menuTextureWidth, m_menuTextureHeight, m_dialogueOptions.size());
+    }
+
+    if (m_dialogueMenuTexture == 0) {
+        glGenTextures(1, &m_dialogueMenuTexture);
+        if (logger) logger->info("VRManager: Gerada nova textura para menu: {}", m_dialogueMenuTexture);
+    }
+
+    glBindTexture(GL_TEXTURE_2D, m_dialogueMenuTexture);
+
+    std::vector<Color> buffer(m_menuTextureWidth * m_menuTextureHeight, Color(0, 0, 0, 180));
+
+    for (size_t i = 0; i < m_dialogueOptions.size(); ++i) {
+        Color textColor = (i == (size_t)m_selectedOptionIndex) ? colorTable.Sunflower : colorTable.White;
+        Color shadowColor = colorTable.Black;
+        
+        int y = 10 + (int)i * itemHeight;
+        font->DrawTextLineToBuff(textColor, shadowColor, &buffer[y * m_menuTextureWidth + indent], m_dialogueOptions[i].text, m_menuTextureWidth);
+    }
+
+    // Flip buffer vertically for OpenGL
+    std::vector<Color> flippedBuffer(m_menuTextureWidth * m_menuTextureHeight);
+    for (int row = 0; row < m_menuTextureHeight; ++row) {
+        std::memcpy(&flippedBuffer[(m_menuTextureHeight - 1 - row) * m_menuTextureWidth],
+                    &buffer[row * m_menuTextureWidth],
+                    m_menuTextureWidth * sizeof(Color));
+    }
+
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m_menuTextureWidth, m_menuTextureHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, flippedBuffer.data());
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+void VRManager::RenderDialogueMenu() {
+    if (m_dialogueOptions.empty()) return;
+
+    GLboolean prevBlend, prevDepthTest, prevCullFace, prevScissor;
+    glGetBooleanv(GL_BLEND, &prevBlend);
+    glGetBooleanv(GL_DEPTH_TEST, &prevDepthTest);
+    glGetBooleanv(GL_CULL_FACE, &prevCullFace);
+    glGetBooleanv(GL_SCISSOR_TEST, &prevScissor);
+
+    if (m_dialogueMenuTexture == 0) return;
+
+    glViewport(0, 0, m_views[m_currentViewIndex].width, m_views[m_currentViewIndex].height);
+    glm::mat4 view = m_views[m_currentViewIndex].viewMatrix;
+
+    // Use same local projection as HUD
+    float left = tan(m_xrViews[m_currentViewIndex].fov.angleLeft);
+    float right = tan(m_xrViews[m_currentViewIndex].fov.angleRight);
+    float down = tan(m_xrViews[m_currentViewIndex].fov.angleDown);
+    float up = tan(m_xrViews[m_currentViewIndex].fov.angleUp);
+    float nearZ = 0.05f;
+    float farZ = 100.0f;
+    
+    glm::mat4 localProjection(0.0f);
+    localProjection[0][0] = 2.0f / (right - left);
+    localProjection[1][1] = 2.0f / (up - down);
+    localProjection[2][0] = (right + left) / (right - left);
+    localProjection[2][1] = (up + down) / (up - down);
+    localProjection[2][2] = -(farZ + nearZ) / (farZ - nearZ);
+    localProjection[2][3] = -1.0f;
+    localProjection[3][2] = -(2.0f * farZ * nearZ) / (farZ - nearZ);
+
+    glm::mat4 invView = glm::inverse(view);
+    glm::vec3 camPos = glm::vec3(invView[3]);
+    glm::vec3 camFwd = glm::vec3(invView * glm::vec4(0, 0, -1, 0));
+    glm::vec3 camUp = glm::vec3(invView * glm::vec4(0, 1, 0, 0));
+    glm::vec3 camRight = glm::vec3(invView * glm::vec4(1, 0, 0, 0));
+
+    // Menu position: 1.5m front, 0.2m down, 0.8m to the right of main text HUD
+    glm::vec3 menuPos = camPos + camFwd * 1.5f - camUp * 0.2f + camRight * 0.85f;
+
+    float aspect = (float)m_menuTextureWidth / (float)m_menuTextureHeight;
+    float panelWidth = 0.6f;
+    float panelHeight = panelWidth / aspect;
+
+    glm::mat4 model = invView;
+    model[3] = glm::vec4(menuPos, 1.0f);
+
+    glDisable(GL_SCISSOR_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+
+    // 1. Background
+    InitDebugResources();
+    if (m_debugShader != 0 && m_quadVAO != 0) {
+        glUseProgram(m_debugShader);
+        glUniformMatrix4fv(glGetUniformLocation(m_debugShader, "view"), 1, GL_FALSE, &view[0][0]);
+        glUniformMatrix4fv(glGetUniformLocation(m_debugShader, "projection"), 1, GL_FALSE, &localProjection[0][0]);
+        
+        glm::mat4 backgroundModel = glm::scale(model, glm::vec3(panelWidth + 0.02f, panelHeight + 0.02f, 1.0f));
+        glUniformMatrix4fv(glGetUniformLocation(m_debugShader, "model"), 1, GL_FALSE, &backgroundModel[0][0]);
+        glUniform4f(glGetUniformLocation(m_debugShader, "color"), 0.1f, 0.1f, 0.1f, 0.9f); 
+
+        glBindVertexArray(m_quadVAO);
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+    }
+
+    // 2. Menu Texture
+    InitOverlayQuad();
+    if (m_quadShader != 0 && m_quadVAO != 0) {
+        glUseProgram(m_quadShader);
+        glUniformMatrix4fv(glGetUniformLocation(m_quadShader, "view"), 1, GL_FALSE, &view[0][0]);
+        glUniformMatrix4fv(glGetUniformLocation(m_quadShader, "projection"), 1, GL_FALSE, &localProjection[0][0]);
+        
+        glm::mat4 menuModel = glm::scale(model, glm::vec3(panelWidth, panelHeight, 1.0f));
+        glUniformMatrix4fv(glGetUniformLocation(m_quadShader, "model"), 1, GL_FALSE, &menuModel[0][0]);
+
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, m_dialogueMenuTexture);
+        glUniform1i(glGetUniformLocation(m_quadShader, "screenTexture"), 0);
+
+        glBindVertexArray(m_quadVAO);
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+    }
+
+    if (prevScissor) glEnable(GL_SCISSOR_TEST); else glDisable(GL_SCISSOR_TEST);
+    if (prevCullFace) glEnable(GL_CULL_FACE); else glDisable(GL_CULL_FACE);
+    if (prevDepthTest) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
+    if (prevBlend) glEnable(GL_BLEND); else glDisable(GL_BLEND);
 }
 
 void VRManager::SetDialogueText(const std::string& text) {
@@ -1597,6 +1773,14 @@ void VRManager::PollEvents() {
         }
         eventData = {XR_TYPE_EVENT_DATA_BUFFER};
     }
+
+    // Process Menu Input
+    // Note: Dialogue menu navigation is now handled in GetMenuMouseState to avoid duplication
+    /*
+    if (!m_dialogueOptions.empty()) {
+        // ... removed duplicate logic ...
+    }
+    */
 }
 
 bool VRManager::BeginFrame() {
@@ -1943,7 +2127,9 @@ bool VRManager::GetMenuMouseState(int menuWidth, int menuHeight, int& outX, int&
 
     const bool canUseOverlayLayer = m_overlayLayerEnabled && m_overlayLayerHasFrame;
     const bool canUseHouseOverlay = m_debugHouseIndicator;
-    if (!canUseOverlayLayer && !canUseHouseOverlay) {
+    const bool hasDialogue = !m_dialogueOptions.empty();
+
+    if (!canUseOverlayLayer && !canUseHouseOverlay && !hasDialogue) {
         return false;
     }
     if (m_session == XR_NULL_HANDLE || !m_sessionRunning)
@@ -2050,6 +2236,92 @@ bool VRManager::GetMenuMouseState(int menuWidth, int menuHeight, int& outX, int&
 
     outClickPressed = pressedNow && !m_menuSelectPressedPrev;
     m_menuSelectPressedPrev = pressedNow;
+
+    // Handle directional selection for dialogue menu
+    if (!m_dialogueOptions.empty()) {
+        static bool stickReset = true;
+        float stickThreshold = 0.5f;
+
+        // Try getting turn action state as well (Right Stick)
+        XrActionStateVector2f turnState = {XR_TYPE_ACTION_STATE_VECTOR2F};
+        if (m_actionTurn != XR_NULL_HANDLE) {
+            XrActionStateGetInfo getInfo = {XR_TYPE_ACTION_STATE_GET_INFO};
+            getInfo.action = m_actionTurn;
+            getInfo.subactionPath = XR_NULL_PATH;
+            xrGetActionStateVector2f(m_session, &getInfo, &turnState);
+        }
+        
+        float inputY = 0.0f;
+        if (moveState.isActive && std::abs(moveState.currentState.y) > 0.1f) {
+            inputY = moveState.currentState.y;
+        } else if (turnState.isActive && std::abs(turnState.currentState.y) > 0.1f) {
+            inputY = turnState.currentState.y;
+        }
+
+        if (logger) {
+            static int debugLogCounter = 0;
+            debugLogCounter++;
+            if (debugLogCounter > 30) { // Log a cada 0.5 segundos (60 fps)
+                logger->info("VRManager Debug: DialogueMenu ativo ({} opções). InputY: {}. MoveActive: {}. TurnActive: {}. SessionState: {}", 
+                    m_dialogueOptions.size(), inputY, moveState.isActive, turnState.isActive, (int)m_sessionState);
+                
+                if (moveState.isActive) logger->info("  Move Raw Y: {}", moveState.currentState.y);
+                if (turnState.isActive) logger->info("  Turn Raw Y: {}", turnState.currentState.y);
+                
+                // Log additional flags to see why moveState might be inactive
+                if (m_actionMove != XR_NULL_HANDLE) {
+                    XrActionStateGetInfo getInfo = {XR_TYPE_ACTION_STATE_GET_INFO};
+                    getInfo.action = m_actionMove;
+                    getInfo.subactionPath = XR_NULL_PATH;
+                    XrActionStateVector2f moveCheck = {XR_TYPE_ACTION_STATE_VECTOR2F};
+                    xrGetActionStateVector2f(m_session, &getInfo, &moveCheck);
+                    logger->info("  Move Action State Check - Active: {}, Current: ({}, {})", moveCheck.isActive, moveCheck.currentState.x, moveCheck.currentState.y);
+                }
+
+                debugLogCounter = 0;
+            }
+        }
+
+        if (inputY != 0.0f) {
+            if (stickReset) {
+                if (inputY > stickThreshold) { // Up (Stick Up is positive Y in OpenXR)
+                    int oldIndex = m_selectedOptionIndex;
+                    m_selectedOptionIndex = (m_selectedOptionIndex > 0) ? m_selectedOptionIndex - 1 : (int)m_dialogueOptions.size() - 1;
+                    UpdateDialogueMenuTexture();
+                    stickReset = false;
+                    if (logger) logger->info("VRManager: Menu Up via Stick (val: {}, {} -> {})", inputY, oldIndex, m_selectedOptionIndex);
+                } else if (inputY < -stickThreshold) { // Down (Stick Down is negative Y in OpenXR)
+                    int oldIndex = m_selectedOptionIndex;
+                    m_selectedOptionIndex = (m_selectedOptionIndex < (int)m_dialogueOptions.size() - 1) ? m_selectedOptionIndex + 1 : 0;
+                    UpdateDialogueMenuTexture();
+                    stickReset = false;
+                    if (logger) logger->info("VRManager: Menu Down via Stick (val: {}, {} -> {})", inputY, oldIndex, m_selectedOptionIndex);
+                }
+            } else {
+                // Higher deadzone to reset stick (prevents rapid-fire on noisy sticks)
+                if (std::abs(inputY) < 0.25f) {
+                    stickReset = true;
+                    // if (logger) logger->info("VRManager: Stick reset threshold reached (val: {})", inputY);
+                }
+            }
+        } else {
+            stickReset = true;
+        }
+
+        // Selection via Trigger - IMPORTANT: Check for click to send message to game
+        if (outClickPressed) {
+            if (m_selectedOptionIndex >= 0 && m_selectedOptionIndex < (int)m_dialogueOptions.size()) {
+                const auto& opt = m_dialogueOptions[m_selectedOptionIndex];
+                if (engine && engine->_messageQueue) {
+                    engine->_messageQueue->addMessageCurrentFrame(static_cast<UIMessageType>(opt.msg), opt.id, 0);
+                    if (logger) logger->info("VRManager: Option selected via directional/click: '{}' (ID: {}, Msg: {})", opt.text, opt.id, opt.msg);
+                    
+                    // Consume the click to prevent Mouse.cpp from triggering a generic click at cursor position
+                    outClickPressed = false;
+                }
+            }
+        }
+    }
 
     if (logger && outClickPressed) {
         logger->info("VRManager: Click Detected! (X: {}, Y: {})", m_menuCursorX, m_menuCursorY);

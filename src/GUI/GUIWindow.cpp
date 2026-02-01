@@ -451,6 +451,7 @@ void DialogueEnding() {
     pDialogueWindow = nullptr;
     pMiscTimer->setPaused(false);
     pEventTimer->setPaused(false);
+    VRManager::Get().ClearDialogueOptions();
 }
 
 void OnButtonClick::Update() {

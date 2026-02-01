@@ -257,6 +257,7 @@ void Engine::Draw() {
                         drawWorld();
 
                         VRManager::Get().RenderDialogueHUD();
+                        VRManager::Get().RenderDialogueMenu();
                         VRManager::Get().RenderOverlay3D();
 
                         VRManager::Get().SetIsRenderingVREye(false);

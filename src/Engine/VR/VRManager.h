@@ -100,10 +100,24 @@ public:
     const std::string& GetDialogueText() const { return m_dialogueText; }
     void ClearDialogueText();
 
+    struct DialogueOption {
+        std::string text;
+        int id;
+        int msg; // UIMSG_SelectNPCDialogueOption etc.
+
+        bool operator==(const DialogueOption& other) const {
+            return id == other.id && msg == other.msg && text == other.text;
+        }
+    };
+    void SetDialogueOptions(const std::vector<DialogueOption>& options);
+    void ClearDialogueOptions();
+
     void RenderDialogueHUD();
+    void RenderDialogueMenu();
 
 private:
     void UpdateDialogueTexture();
+    void UpdateDialogueMenuTexture();
     VRManager();
     ~VRManager();
 
@@ -229,6 +243,15 @@ private:
     unsigned int m_dialogueFontTexture = 0; // Future use if we want a dedicated font
     int m_dialogueTextureWidth = 0;
     int m_dialogueTextureHeight = 0;
+
+    // Dialogue Menu
+    std::vector<DialogueOption> m_dialogueOptions;
+    int m_selectedOptionIndex = 0;
+    unsigned int m_dialogueMenuTexture = 0;
+    int m_menuTextureWidth = 0;
+    int m_menuTextureHeight = 0;
+    bool m_menuInputCooldown = false;
+    uint32_t m_lastMenuInputTime = 0;
 
     // Frame State
     XrFrameState m_frameState = {XR_TYPE_FRAME_STATE};
