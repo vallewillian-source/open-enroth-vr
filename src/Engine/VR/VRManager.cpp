@@ -2394,7 +2394,19 @@ glm::mat4 VRManager::GetCurrentViewMatrix(const glm::vec3& worldOrigin, float ya
     if (m_currentViewIndex < 0 || m_currentViewIndex >= m_views.size()) return glm::mat4(1.0f);
     
     // VR View Matrix (Headset -> Local Y-Up)
-    glm::mat4 vrView = m_views[m_currentViewIndex].viewMatrix;
+    // We reconstruct it here to apply world scale to the position
+    const auto& pose = m_views[m_currentViewIndex].view.pose;
+    glm::quat orientation(pose.orientation.w, pose.orientation.x, pose.orientation.y, pose.orientation.z);
+    
+    // Scale position: 1 meter (OpenXR) = 100 units (MM7)
+    // We assume the game uses ~1 unit = 1 cm scale based on eyeLevel=160 (1.6m)
+    constexpr float WORLD_SCALE = 100.0f;
+    glm::vec3 position(pose.position.x * WORLD_SCALE, pose.position.y * WORLD_SCALE, pose.position.z * WORLD_SCALE);
+
+    glm::mat4 rotation = glm::mat4_cast(orientation);
+    glm::mat4 translation = glm::translate(glm::mat4(1.0f), position);
+    glm::mat4 poseMat = translation * rotation;
+    glm::mat4 vrView = glm::inverse(poseMat);
     
     // Conversion from Z-Up (OpenEnroth) to Y-Up (OpenXR)
     // Rotate -90 degrees around X axis
