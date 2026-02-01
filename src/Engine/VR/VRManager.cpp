@@ -125,6 +125,32 @@ static std::string getActiveRuntimePathWin32() {
 #endif
 }
 
+static int64_t SelectColorSwapchainFormat(XrSession session) {
+    uint32_t formatCount = 0;
+    xrEnumerateSwapchainFormats(session, 0, &formatCount, nullptr);
+    std::vector<int64_t> formats(formatCount);
+    xrEnumerateSwapchainFormats(session, formatCount, &formatCount, formats.data());
+
+    int64_t selectedFormat = formats[0]; // Fallback
+
+    // Prefer SRGB to avoid washed out colors (double gamma correction issues)
+    // If the game renders in sRGB space (which it likely does), we should tell OpenXR that.
+    for (int64_t format : formats) {
+        if (format == GL_SRGB8_ALPHA8) {
+            return format;
+        }
+    }
+    
+    // Fallback to RGBA8 if SRGB not found
+    for (int64_t format : formats) {
+        if (format == GL_RGBA8) {
+            return format;
+        }
+    }
+
+    return selectedFormat;
+}
+
 void VRManager::SetDebugHouseIndicator(bool enabled) {
     if (enabled && !m_debugHouseIndicator) {
         // Reset anchor initialization when entering a house
@@ -567,9 +593,14 @@ void VRManager::InitOverlayLayer(int width, int height) {
         m_overlayLayerFBO = 0;
     }
 
+    int64_t swapchainFormat = SelectColorSwapchainFormat(m_session);
+    if (logger) {
+        logger->info("VRManager: Overlay Swapchain format selected: {}", swapchainFormat);
+    }
+
     XrSwapchainCreateInfo swapchainInfo = {XR_TYPE_SWAPCHAIN_CREATE_INFO};
     swapchainInfo.arraySize = 1;
-    swapchainInfo.format = GL_RGBA8;
+    swapchainInfo.format = swapchainFormat;
     swapchainInfo.width = width;
     swapchainInfo.height = height;
     swapchainInfo.mipCount = 1;
@@ -627,6 +658,11 @@ void VRManager::CaptureScreenToOverlayLayer(int srcWidth, int srcHeight) {
     if (fboStatus == GL_FRAMEBUFFER_COMPLETE) {
         glDisable(GL_SCISSOR_TEST);
         glViewport(0, 0, m_overlayLayerWidth, m_overlayLayerHeight);
+        
+        // Disable sRGB conversion to avoid washing out colors when writing to sRGB swapchain
+        // The source is already sRGB (treated as linear by GL), and we want to copy raw values.
+        glDisable(GL_FRAMEBUFFER_SRGB); 
+        
         glBlitFramebuffer(0, 0, srcWidth, srcHeight,
                           0, 0, m_overlayLayerWidth, m_overlayLayerHeight,
                           GL_COLOR_BUFFER_BIT, GL_LINEAR);
@@ -1722,11 +1758,16 @@ bool VRManager::CreateSwapchains() {
         }
     }
 
+    int64_t swapchainFormat = SelectColorSwapchainFormat(m_session);
+    if (logger) {
+        logger->info("VRManager: Main Swapchain format selected: {}", swapchainFormat);
+    }
+
     for (uint32_t i = 0; i < viewCount; i++) {
         // Create Swapchain
         XrSwapchainCreateInfo swapchainInfo = {XR_TYPE_SWAPCHAIN_CREATE_INFO};
         swapchainInfo.arraySize = 1;
-        swapchainInfo.format = GL_RGBA8; // Simple format
+        swapchainInfo.format = swapchainFormat; // Simple format
         swapchainInfo.width = configViews[i].recommendedImageRectWidth;
         swapchainInfo.height = configViews[i].recommendedImageRectHeight;
         swapchainInfo.mipCount = 1;
@@ -2020,6 +2061,9 @@ unsigned int VRManager::AcquireSwapchainTexture(int viewIndex) {
 
     glDisable(GL_SCISSOR_TEST);
     glViewport(0, 0, m_swapchains[viewIndex].width, m_swapchains[viewIndex].height);
+
+    // Disable sRGB conversion for writing to swapchain (we write raw sRGB values)
+    glDisable(GL_FRAMEBUFFER_SRGB);
 
     GLenum fboStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER);
     if (fboStatus != GL_FRAMEBUFFER_COMPLETE) {
