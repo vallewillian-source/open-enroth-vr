@@ -14,6 +14,7 @@
 #include "Engine/mm7_data.h"
 #include "Engine/AssetsManager.h"
 #include "Engine/Engine.h"
+#include "Engine/VR/VRManager.h"
 #include "Engine/Graphics/Viewport.h"
 
 #include "GUI/GUIFont.h"
@@ -170,6 +171,7 @@ void GUIWindow_Dialogue::Release() {
     current_screen_type = prev_screen_type;
     currentSpeakingActor = nullptr;
     pParty->switchToNextActiveCharacter();
+    VRManager::Get().ClearDialogueText();
     GUIWindow::Release();
 }
 

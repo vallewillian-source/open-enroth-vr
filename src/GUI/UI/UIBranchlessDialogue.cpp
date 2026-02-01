@@ -7,6 +7,7 @@
 #include "Engine/Party.h"
 #include "Engine/mm7_data.h"
 #include "Engine/Graphics/Viewport.h"
+#include "Engine/VR/VRManager.h"
 
 #include "GUI/GUIFont.h"
 #include "GUI/UI/UIHouses.h"
@@ -30,6 +31,7 @@ void GUIWindow_BranchlessDialogue::Release() {
     current_screen_type = prev_screen_type;
     keyboardInputHandler->SetWindowInputStatus(WINDOW_INPUT_CANCELLED);
 
+    VRManager::Get().ClearDialogueText();
     GUIWindow::Release();
 }
 

@@ -18,6 +18,7 @@
 #include "Engine/MapInfo.h"
 #include "Engine/Party.h"
 #include "Engine/PriceCalculator.h"
+#include "Engine/VR/VRManager.h"
 #include "Engine/Graphics/Viewport.h"
 #include "Engine/Tables/HouseTable.h"
 #include "Engine/Tables/TransitionTable.h"
@@ -1106,6 +1107,7 @@ void GUIWindow_House::Release() {
         pCamera3D->_viewYaw = pParty->_viewYaw;
     }
 
+    VRManager::Get().ClearDialogueText();
     GUIWindow::Release();
 }
 
