@@ -73,6 +73,8 @@ void Io::KeyboardInputHandler::GenerateActions(bool isPaused) {
         switch (action) {
             case INPUT_ACTION_MOVE_FORWARD: return vrInput.moveY > 0.5f;
             case INPUT_ACTION_MOVE_BACKWARDS: return vrInput.moveY < -0.5f;
+            case INPUT_ACTION_STRAFE_LEFT: return vrInput.moveX < -0.5f;
+            case INPUT_ACTION_STRAFE_RIGHT: return vrInput.moveX > 0.5f;
             case INPUT_ACTION_TURN_LEFT: return vrInput.turnX < -0.5f;
             case INPUT_ACTION_TURN_RIGHT: return vrInput.turnX > 0.5f;
             case INPUT_ACTION_ATTACK: return vrInput.attack;
@@ -95,6 +97,8 @@ void Io::KeyboardInputHandler::GenerateActions(bool isPaused) {
         switch (action) {
             case INPUT_ACTION_MOVE_FORWARD: return vrInput.moveY > 0.5f && !(this->prevVRInput.moveY > 0.5f);
             case INPUT_ACTION_MOVE_BACKWARDS: return vrInput.moveY < -0.5f && !(this->prevVRInput.moveY < -0.5f);
+            case INPUT_ACTION_STRAFE_LEFT: return vrInput.moveX < -0.5f && !(this->prevVRInput.moveX < -0.5f);
+            case INPUT_ACTION_STRAFE_RIGHT: return vrInput.moveX > 0.5f && !(this->prevVRInput.moveX > 0.5f);
             case INPUT_ACTION_TURN_LEFT: return vrInput.turnX < -0.5f && !(this->prevVRInput.turnX < -0.5f);
             case INPUT_ACTION_TURN_RIGHT: return vrInput.turnX > 0.5f && !(this->prevVRInput.turnX > 0.5f);
             case INPUT_ACTION_ATTACK: return vrInput.attack && !this->prevVRInput.attack;
