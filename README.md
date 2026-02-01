@@ -27,6 +27,23 @@ To run or build this mod, you need:
 
 ---
 
+## 🎮 Controls (VR)
+
+The mod features a modernized VR locomotion system designed for comfort and accessibility:
+
+### **Left Controller (Locomotion)**
+*   **Stick Up/Down**: Move Forward / Backward.
+*   **Stick Left/Right**: **Strafe Left / Right** (Sideways movement).
+*   **Diagonal Input**: Full 360° directional movement (combined Forward/Back and Strafe).
+
+### **Right Controller (View & Action)**
+*   **Stick Left/Right**: Snap/Smooth Turn.
+*   **Stick Up**: **Jump**.
+*   **Trigger**: Interact / Select (Menu & World).
+*   **Grip/Button**: Combat / Cast / Quick Cast (mapped to standard actions).
+
+---
+
 ## ⚙️ How to Build
 
 1.  **Clone the repository**:
