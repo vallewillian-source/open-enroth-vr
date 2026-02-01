@@ -129,6 +129,7 @@ void VRManager::SetDebugHouseIndicator(bool enabled) {
     if (enabled && !m_debugHouseIndicator) {
         // Reset anchor initialization when entering a house
         m_housePoseInitialized = false;
+        m_waitForTriggerRelease = true; // Prevent accidental selection when entering
         if (logger) {
             logger->info("VRManager: DebugHouseIndicator ENABLED (Entering house)");
         }
@@ -228,6 +229,7 @@ void VRManager::SetDialogueOptions(const std::vector<DialogueOption>& options) {
     }
     m_dialogueOptions = options;
     m_selectedOptionIndex = 0;
+    m_waitForTriggerRelease = true; // Prevent accidental selection when options change
     UpdateDialogueMenuTexture();
 }
 
@@ -2236,7 +2238,16 @@ bool VRManager::GetMenuMouseState(int menuWidth, int menuHeight, int& outX, int&
         pressedNow = true;
     }
 
-    outClickPressed = pressedNow && !m_menuSelectPressedPrev;
+    if (m_waitForTriggerRelease) {
+        if (!pressedNow) {
+            m_waitForTriggerRelease = false;
+            if (logger) logger->info("VRManager: Trigger released, menu interaction enabled.");
+        }
+        outClickPressed = false;
+    } else {
+        outClickPressed = pressedNow && !m_menuSelectPressedPrev;
+    }
+    
     m_menuSelectPressedPrev = pressedNow;
 
     // Handle directional selection for dialogue menu

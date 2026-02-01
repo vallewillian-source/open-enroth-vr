@@ -237,6 +237,7 @@ private:
     float m_menuCursorSpeed = 4.0f; // Pixels per frame factor (adjust as needed)
     bool m_menuCursorInitialized = false;
     bool m_menuSelectPressedPrev = false;
+    bool m_waitForTriggerRelease = false;
 
     // Dialogue HUD
     std::string m_dialogueText;
