@@ -233,15 +233,6 @@ void Engine::Draw() {
         render->BindRenderFramebufferForRead();
         VRManager::Get().CaptureScreenToOverlay(dims.w, dims.h);
 
-        // Update House Indicator state based on screen type
-        if (current_screen_type == SCREEN_HOUSE) {
-            VRManager::Get().SetDebugHouseIndicator(true);
-        } else if (current_screen_type == SCREEN_GAME) {
-            // Only disable if it was enabled by screen type (don't override manual debug if we had one)
-            // But for MVP, let's just sync it with SCREEN_HOUSE.
-            VRManager::Get().SetDebugHouseIndicator(false);
-        }
-
         if (VRManager::Get().BeginFrame()) {
             if (VRManager::Get().ShouldRenderFrame()) {
                 for (int i = 0; i < 2; ++i) {

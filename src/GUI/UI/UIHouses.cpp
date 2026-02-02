@@ -387,7 +387,7 @@ bool enterHouse(HouseId uHouseID) {
     logger->info("Entrando na casa: {} (ID: {})", houseTable[uHouseID].name, std::to_underlying(uHouseID));
 
     if (VRManager::Get().IsInitialized()) {
-        VRManager::Get().SetDebugHouseIndicator(true);
+        VRManager::Get().SetShowGuiBillboard(true);
     }
 
     return true;
@@ -1115,6 +1115,10 @@ void GUIWindow_House::Release() {
     if (engine->config->settings.FlipOnExit.value()) {
         pParty->_viewYaw = (TrigLUT.uIntegerDoublePi - 1) & (TrigLUT.uIntegerPi + pParty->_viewYaw);
         pCamera3D->_viewYaw = pParty->_viewYaw;
+    }
+
+    if (VRManager::Get().IsInitialized()) {
+        VRManager::Get().SetShowGuiBillboard(false);
     }
 
     VRManager::Get().ClearDialogueText();
