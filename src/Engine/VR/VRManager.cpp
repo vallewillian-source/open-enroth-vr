@@ -1381,81 +1381,75 @@ void VRManager::RenderDialogueHUD() {
 void VRManager::RenderOverlay3D() {
     if (m_quadShader == 0 || m_overlayTexture == 0) return;
 
-    // Use current view parameters
-    // In RenderOverlay3D, we are inside the VR Render Loop, so correct framebuffer is bound.
-    
-    // Set Viewport to match VR View Size
-    glViewport(0, 0, m_views[m_currentViewIndex].width, m_views[m_currentViewIndex].height);
+    if (m_showGuiBillboard) {
+        // Use current view parameters
+        // In RenderOverlay3D, we are inside the VR Render Loop, so correct framebuffer is bound.
+        
+        // Set Viewport to match VR View Size
+        glViewport(0, 0, m_views[m_currentViewIndex].width, m_views[m_currentViewIndex].height);
 
-    // Get View and Projection from current VR View
-    glm::mat4 view = m_views[m_currentViewIndex].viewMatrix;
-    glm::mat4 projection = m_views[m_currentViewIndex].projectionMatrix;
+        // Get View from current VR View
+        glm::mat4 view = m_views[m_currentViewIndex].viewMatrix;
+        
+        // Create a local projection matrix with Near=0.05f to ensure the billboard is visible
+        // This avoids using the global projection matrix that might have a high Near plane
+        float l = tan(m_xrViews[m_currentViewIndex].fov.angleLeft);
+        float r = tan(m_xrViews[m_currentViewIndex].fov.angleRight);
+        float d = tan(m_xrViews[m_currentViewIndex].fov.angleDown);
+        float u = tan(m_xrViews[m_currentViewIndex].fov.angleUp);
+        float nearZ = 0.05f;
+        float farZ = 100.0f; 
+        
+        glm::mat4 localProjection(0.0f);
+        localProjection[0][0] = 2.0f / (r - l);
+        localProjection[1][1] = 2.0f / (u - d);
+        localProjection[2][0] = (r + l) / (r - l);
+        localProjection[2][1] = (u + d) / (u - d);
+        localProjection[2][2] = -(farZ + nearZ) / (farZ - nearZ);
+        localProjection[2][3] = -1.0f;
+        localProjection[3][2] = -(2.0f * farZ * nearZ) / (farZ - nearZ);
 
-    // Calculate Model Matrix
-    // We want the screen to be 1.5m in front of the HMD's CURRENT position.
-    // Actually, if we do that, it will be "locked" to the face (HUD).
-    // The user said "Ao dar esc, devemos ver essa tela 2D na nossa frente".
-    // For MVP, Head-Locked is fine.
-    
-    // HMD View Matrix is World->View.
-    // Inverse View Matrix is View->World (Camera Transform).
-    glm::mat4 invView = glm::inverse(view);
-    
-    // Position: Camera Position + Camera Forward * 1.5m
-    // OpenXR Camera Forward is -Z (in View Space).
-    // So in World Space, it is invView * (0, 0, -1, 0).
-    
-    glm::vec3 camPos = glm::vec3(invView[3]);
-    glm::vec3 camFwd = glm::vec3(invView * glm::vec4(0, 0, -1, 0));
-    glm::vec3 quadPos = camPos + camFwd * 1.5f;
+        // Calculate Model Matrix
+        // We want the screen to be 1.5m in front of the HMD's CURRENT position.
+        // Inverse View Matrix is View->World (Camera Transform).
+        glm::mat4 invView = glm::inverse(view);
+        
+        // Position: Camera Position + Camera Forward * 1.5m
+        // OpenXR Camera Forward is -Z (in View Space).
+        glm::vec3 camPos = glm::vec3(invView[3]);
+        glm::vec3 camFwd = glm::vec3(invView * glm::vec4(0, 0, -1, 0));
+        glm::vec3 quadPos = camPos + camFwd * 1.5f;
 
-    // Orientation: Face the camera.
-    // We can just use the Camera's Rotation.
-    // But we need to make sure the quad faces "back" to the camera.
-    // The quad is defined in XY plane facing +Z? No, usually +Z is normal.
-    // Wait, vertices are flat on Z=0. Normal is +Z.
-    // If we want it to face camera, we need it to look at camera.
-    // Or we can just take Camera Rotation and apply it.
-    // Camera looks down -Z. Quad needs to face +Z to be seen?
-    // If quad is at (0,0,-1.5) in view space, and faces +Z, it is visible.
+        // Construct Model Matrix from Camera Matrix (invView), but move position.
+        // Scaling to match a reasonable screen size (e.g. 1.2m width)
+        glm::mat4 model = invView;
+        model[3] = glm::vec4(quadPos, 1.0f);
+        model = glm::scale(model, glm::vec3(1.2f, 1.2f / 1.333f, 1.0f));
 
-    // Let's do it in View Space! It's easier.
-    // Model Matrix in View Space = Translation(0, 0, -1.5).
-    // Then we don't need 'view' matrix in shader?
-    // Wait, shader uses projection * view * model.
-    // If we define Model relative to World, we need full chain.
-    // If we define Model relative to View, we pass Identity as View, and (View * Model) as Model.
+        // Render State Setup
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glDisable(GL_DEPTH_TEST);
+        glDisable(GL_CULL_FACE); // Important: Ensure we see the quad regardless of winding
 
-    // Let's stick to World Space logic for consistency.
-    // Model Matrix = Translation(quadPos) * Rotation(camRot).
-    // Rotation: we want the quad to have same orientation as camera.
-    // Camera looks -Z. Quad normal is +Z (defined above).
-    // So Quad is "facing away" from camera if we just copy rotation?
-    // No, if Quad is at Z=-1.5 (local), and faces +Z (local), it faces origin (camera).
-    // So yes, copying Camera Rotation is correct if Quad is defined to face +Z.
+        glUseProgram(m_quadShader);
 
-    // Construct Model Matrix from Camera Matrix (invView), but move position.
-    glm::mat4 model = invView;
-    model[3] = glm::vec4(quadPos, 1.0f); // Set translation to new position
+        glUniformMatrix4fv(glGetUniformLocation(m_quadShader, "view"), 1, GL_FALSE, &view[0][0]);
+        glUniformMatrix4fv(glGetUniformLocation(m_quadShader, "projection"), 1, GL_FALSE, &localProjection[0][0]);
+        glUniformMatrix4fv(glGetUniformLocation(m_quadShader, "model"), 1, GL_FALSE, &model[0][0]);
 
-    // Render State Setup
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glDisable(GL_DEPTH_TEST); // Overlay should be on top? Or check depth?
-    // Usually HUD is on top.
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, m_overlayTexture);
+        glUniform1i(glGetUniformLocation(m_quadShader, "screenTexture"), 0);
 
-    glUseProgram(m_quadShader);
-
-    glUniformMatrix4fv(glGetUniformLocation(m_quadShader, "view"), 1, GL_FALSE, &view[0][0]);
-    glUniformMatrix4fv(glGetUniformLocation(m_quadShader, "projection"), 1, GL_FALSE, &projection[0][0]);
-    glUniformMatrix4fv(glGetUniformLocation(m_quadShader, "model"), 1, GL_FALSE, &model[0][0]);
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_overlayTexture);
-    glUniform1i(glGetUniformLocation(m_quadShader, "screenTexture"), 0);
-
-    glBindVertexArray(m_quadVAO);
-    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+        glBindVertexArray(m_quadVAO);
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+        
+        GLenum err = glGetError();
+        if (err != GL_NO_ERROR && logger) {
+            logger->error("VRManager: RenderOverlay3D billboard gl error: 0x{:x}", err);
+        }
+    }
 
     // Debug House Indicator: Draw the monitor screen anchored in the world
     if (m_debugHouseIndicator) {
@@ -1863,6 +1857,26 @@ bool VRManager::BeginFrame() {
             syncInfo.countActiveActionSets = (uint32_t)activeSets.size();
             syncInfo.activeActionSets = activeSets.data();
             xrSyncActions(m_session, &syncInfo);
+        }
+
+        // Toggle GUI Billboard with X button
+        if (m_actionCast != XR_NULL_HANDLE) {
+            XrActionStateGetInfo getInfo = {XR_TYPE_ACTION_STATE_GET_INFO};
+            getInfo.action = m_actionCast;
+            XrActionStateBoolean boolState = {XR_TYPE_ACTION_STATE_BOOLEAN};
+            if (XR_SUCCEEDED(xrGetActionStateBoolean(m_session, &getInfo, &boolState))) {
+                if (boolState.isActive && boolState.currentState) {
+                    if (!m_guiBillboardButtonPressedPrev) {
+                        m_showGuiBillboard = !m_showGuiBillboard;
+                        if (logger) {
+                            logger->info("VRManager: GUI Billboard toggled to {}", m_showGuiBillboard);
+                        }
+                    }
+                    m_guiBillboardButtonPressedPrev = true;
+                } else {
+                    m_guiBillboardButtonPressedPrev = false;
+                }
+            }
         }
     }
 

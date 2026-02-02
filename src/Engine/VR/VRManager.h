@@ -95,6 +95,9 @@ public:
     void SetDebugHouseIndicator(bool enabled);
     bool GetDebugHouseIndicator() const { return m_debugHouseIndicator; }
 
+    void SetShowGuiBillboard(bool enabled) { m_showGuiBillboard = enabled; }
+    bool GetShowGuiBillboard() const { return m_showGuiBillboard; }
+
     // Dialogue Text HUD
     void SetDialogueText(const std::string& text);
     const std::string& GetDialogueText() const { return m_dialogueText; }
@@ -123,6 +126,7 @@ private:
 
     // World-locked house overlay state
     bool m_debugHouseIndicator = false;
+    bool m_showGuiBillboard = false;
     bool m_housePoseInitialized = false;
     glm::vec3 m_houseOverlayWorldPos = glm::vec3(0.0f);
     glm::quat m_houseOverlayWorldRot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
@@ -237,6 +241,7 @@ private:
     float m_menuCursorSpeed = 4.0f; // Pixels per frame factor (adjust as needed)
     bool m_menuCursorInitialized = false;
     bool m_menuSelectPressedPrev = false;
+    bool m_guiBillboardButtonPressedPrev = false;
     bool m_waitForTriggerRelease = false;
 
     // Dialogue HUD
