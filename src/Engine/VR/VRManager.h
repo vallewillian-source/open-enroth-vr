@@ -95,7 +95,7 @@ public:
     void SetDebugHouseIndicator(bool enabled);
     bool GetDebugHouseIndicator() const { return m_debugHouseIndicator; }
 
-    void SetShowGuiBillboard(bool enabled) { m_showGuiBillboard = enabled; }
+    void SetShowGuiBillboard(bool enabled);
     bool GetShowGuiBillboard() const { return m_showGuiBillboard; }
 
     // Dialogue Text HUD
@@ -134,6 +134,11 @@ private:
     int m_houseOverlayScreenH = 0;
     float m_houseOverlayWidthMeters = 0.0f;
     float m_houseOverlayHeightMeters = 0.0f;
+
+    // World-locked gui billboard state
+    bool m_guiBillboardPoseInitialized = false;
+    glm::vec3 m_guiBillboardWorldPos = glm::vec3(0.0f);
+    glm::quat m_guiBillboardWorldRot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
 
     bool CreateInstance();
     bool GetSystem();

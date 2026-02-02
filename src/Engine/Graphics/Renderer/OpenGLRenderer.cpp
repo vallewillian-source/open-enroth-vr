@@ -1457,6 +1457,82 @@ void OpenGLRenderer::DrawOutdoorSky() {
 
     if (pOutdoor->sky_texture) {
         int dimming_level = (uCurrentlyLoadedLevelType == LEVEL_OUTDOOR)? 31 : 0;
+        
+        // VR Sky Rendering - World Locked Cylinder
+        if (VRManager::Get().IsSessionRunning()) {
+            GLboolean prevDepthMask;
+            glGetBooleanv(GL_DEPTH_WRITEMASK, &prevDepthMask);
+            glDepthMask(GL_FALSE);
+
+            _set_3d_projection_matrix();
+            _set_3d_modelview_matrix();
+
+            float radius = pCamera3D->GetFarClip() * 0.9f;
+            float height = radius * 0.5f; // Adjust height to cover FOV
+            float yCenter = (float)pCamera3D->vCameraPos.y;
+            // Lower the sky relative to camera to simulate horizon? 
+            // Original code calculates horizon_height_offset. 
+            // For a cylinder at infinity, we can just center on camera Y or slightly offset.
+            // Let's center on camera Y for now.
+
+            int segments = 32;
+            float angleStep = (2.0f * 3.14159f) / segments;
+            
+            // Texture scrolling animation
+            float timeU = pMiscTimer->time().realtimeMillisecondsFloat() / 40000.0f; // Slow scroll
+
+            Colorf uTint = GetActorTintColor(dimming_level, 0, radius, 1, 0).toColorf();
+            float texid = (float)pOutdoor->sky_texture->renderId().value();
+
+            for (int i = 0; i < segments; ++i) {
+                float a1 = i * angleStep;
+                float a2 = (i + 1) * angleStep;
+
+                float x1 = cos(a1) * radius + (float)pCamera3D->vCameraPos.x;
+                float z1 = sin(a1) * radius + (float)pCamera3D->vCameraPos.z;
+                float x2 = cos(a2) * radius + (float)pCamera3D->vCameraPos.x;
+                float z2 = sin(a2) * radius + (float)pCamera3D->vCameraPos.z;
+
+                float u1 = (float)i / segments + timeU;
+                float u2 = (float)(i + 1) / segments + timeU;
+
+                float yTop = yCenter + height;
+                float yBot = yCenter - height;
+
+                // Triangle 1
+                {
+                    ForcePerVertex &v = _forcePerVertices.emplace_back();
+                    v.pos = Vec3f(x1, yTop, z1); v.w = 1.0f; v.texuv = Vec2f(u1, 0.0f); v.texw = 1.0f; v.screenspace = radius; v.color = uTint; v.texid = texid;
+                }
+                {
+                    ForcePerVertex &v = _forcePerVertices.emplace_back();
+                    v.pos = Vec3f(x1, yBot, z1); v.w = 1.0f; v.texuv = Vec2f(u1, 1.0f); v.texw = 1.0f; v.screenspace = radius; v.color = uTint; v.texid = texid;
+                }
+                {
+                    ForcePerVertex &v = _forcePerVertices.emplace_back();
+                    v.pos = Vec3f(x2, yTop, z2); v.w = 1.0f; v.texuv = Vec2f(u2, 0.0f); v.texw = 1.0f; v.screenspace = radius; v.color = uTint; v.texid = texid;
+                }
+
+                // Triangle 2
+                {
+                    ForcePerVertex &v = _forcePerVertices.emplace_back();
+                    v.pos = Vec3f(x1, yBot, z1); v.w = 1.0f; v.texuv = Vec2f(u1, 1.0f); v.texw = 1.0f; v.screenspace = radius; v.color = uTint; v.texid = texid;
+                }
+                {
+                    ForcePerVertex &v = _forcePerVertices.emplace_back();
+                    v.pos = Vec3f(x2, yBot, z2); v.w = 1.0f; v.texuv = Vec2f(u2, 1.0f); v.texw = 1.0f; v.screenspace = radius; v.color = uTint; v.texid = texid;
+                }
+                {
+                    ForcePerVertex &v = _forcePerVertices.emplace_back();
+                    v.pos = Vec3f(x2, yTop, z2); v.w = 1.0f; v.texuv = Vec2f(u2, 0.0f); v.texw = 1.0f; v.screenspace = radius; v.color = uTint; v.texid = texid;
+                }
+            }
+
+            DrawForcePerVerts();
+            glDepthMask(prevDepthMask);
+            return;
+        }
+
         int uNumVertices = 4;
 
         // centering(центруем)-----------------------------------------------------------------

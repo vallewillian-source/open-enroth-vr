@@ -167,6 +167,16 @@ void VRManager::SetDebugHouseIndicator(bool enabled) {
     m_debugHouseIndicator = enabled;
 }
 
+void VRManager::SetShowGuiBillboard(bool enabled) {
+    if (enabled && !m_showGuiBillboard) {
+        m_guiBillboardPoseInitialized = false;
+        if (logger) {
+            logger->info("VRManager: ShowGuiBillboard ENABLED (MVP Character Screen)");
+        }
+    }
+    m_showGuiBillboard = enabled;
+}
+
 void VRManager::UpdateDialogueTexture() {
     if (m_dialogueText.empty()) return;
 
@@ -1381,6 +1391,28 @@ void VRManager::RenderDialogueHUD() {
 void VRManager::RenderOverlay3D() {
     if (m_quadShader == 0 || m_overlayTexture == 0) return;
 
+    // Save current states
+    GLboolean prevBlend = glIsEnabled(GL_BLEND);
+    GLboolean prevDepthTest = glIsEnabled(GL_DEPTH_TEST);
+    GLboolean prevCullFace = glIsEnabled(GL_CULL_FACE);
+    GLboolean prevScissor = glIsEnabled(GL_SCISSOR_TEST);
+    GLint prevPolygonMode[2];
+    glGetIntegerv(GL_POLYGON_MODE, prevPolygonMode);
+    GLint prevActiveTexture;
+    glGetIntegerv(GL_ACTIVE_TEXTURE, &prevActiveTexture);
+    GLint prevTextureBinding;
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &prevTextureBinding);
+    GLint prevProgram;
+    glGetIntegerv(GL_CURRENT_PROGRAM, &prevProgram);
+    GLint prevVAO;
+    glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &prevVAO);
+    GLint prevViewport[4];
+    glGetIntegerv(GL_VIEWPORT, prevViewport);
+
+    // Save current global projection matrix if we are going to modify it
+    // Actually, we use localProjection in most places, but the game engine 
+    // relies on the projection matrix set in OpenGLRenderer.
+
     if (m_showGuiBillboard) {
         // Use current view parameters
         // In RenderOverlay3D, we are inside the VR Render Loop, so correct framebuffer is bound.
@@ -1409,21 +1441,27 @@ void VRManager::RenderOverlay3D() {
         localProjection[2][3] = -1.0f;
         localProjection[3][2] = -(2.0f * farZ * nearZ) / (farZ - nearZ);
 
-        // Calculate Model Matrix
-        // We want the screen to be 1.5m in front of the HMD's CURRENT position.
-        // Inverse View Matrix is View->World (Camera Transform).
-        glm::mat4 invView = glm::inverse(view);
-        
-        // Position: Camera Position + Camera Forward * 1.5m
-        // OpenXR Camera Forward is -Z (in View Space).
-        glm::vec3 camPos = glm::vec3(invView[3]);
-        glm::vec3 camFwd = glm::vec3(invView * glm::vec4(0, 0, -1, 0));
-        glm::vec3 quadPos = camPos + camFwd * 1.5f;
+        // Calculate Model Matrix - World Locked
+        if (!m_guiBillboardPoseInitialized) {
+            // Capture head position ONCE when the billboard is first shown
+            glm::mat4 invView = glm::inverse(view);
+            glm::vec3 camPos = glm::vec3(invView[3]);
+            glm::vec3 camFwd = glm::vec3(invView * glm::vec4(0, 0, -1, 0));
+            
+            m_guiBillboardWorldPos = camPos + camFwd * 1.5f;
+            m_guiBillboardWorldRot = glm::quat_cast(invView);
+            m_guiBillboardPoseInitialized = true;
+            
+            if (logger) {
+                logger->info("VRManager: GUI Billboard Position Initialized at ({}, {}, {})", 
+                             m_guiBillboardWorldPos.x, m_guiBillboardWorldPos.y, m_guiBillboardWorldPos.z);
+            }
+        }
 
-        // Construct Model Matrix from Camera Matrix (invView), but move position.
+        // Construct Model Matrix from saved world pose
+        glm::mat4 model = glm::mat4_cast(m_guiBillboardWorldRot);
+        model[3] = glm::vec4(m_guiBillboardWorldPos, 1.0f);
         // Scaling to match a reasonable screen size (e.g. 1.2m width)
-        glm::mat4 model = invView;
-        model[3] = glm::vec4(quadPos, 1.0f);
         model = glm::scale(model, glm::vec3(1.2f, 1.2f / 1.333f, 1.0f));
 
         // Render State Setup
@@ -1551,8 +1589,17 @@ void VRManager::RenderOverlay3D() {
     }
 
     // Restore State
-    glEnable(GL_DEPTH_TEST);
-    glDisable(GL_BLEND);
+    glViewport(prevViewport[0], prevViewport[1], prevViewport[2], prevViewport[3]);
+    glPolygonMode(GL_FRONT_AND_BACK, prevPolygonMode[0]);
+    glActiveTexture(prevActiveTexture);
+    glBindTexture(GL_TEXTURE_2D, prevTextureBinding);
+    glUseProgram(prevProgram);
+    glBindVertexArray(prevVAO);
+
+    if (prevScissor) glEnable(GL_SCISSOR_TEST); else glDisable(GL_SCISSOR_TEST);
+    if (prevCullFace) glEnable(GL_CULL_FACE); else glDisable(GL_CULL_FACE);
+    if (prevDepthTest) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
+    if (prevBlend) glEnable(GL_BLEND); else glDisable(GL_BLEND);
 }
 
 bool VRManager::CreateSession(HDC hDC, HGLRC hGLRC) {
