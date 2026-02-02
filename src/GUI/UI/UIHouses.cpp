@@ -378,6 +378,9 @@ bool enterHouse(HouseId uHouseID) {
 
         if (!pParty->activeCharacter()._achievedAwardsBits[membershipAwardForGuild(uHouseID)]) {
             playHouseSound(uHouseID, HOUSE_SOUND_MAGIC_GUILD_MEMBERS_ONLY);
+            if (VRManager::Get().IsInitialized()) {
+                VRManager::Get().SetShowGuiBillboard(true);
+            }
             return true;
         }
     } else if ((isStable(uHouseID) || isBoat(uHouseID)) && !isTravelAvailable(uHouseID)) {
