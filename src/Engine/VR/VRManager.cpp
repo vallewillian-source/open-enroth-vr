@@ -24,6 +24,8 @@
 #include "Engine/Graphics/Camera.h"
 #include "GUI/GUIMessageQueue.h"
 #include "Library/Logger/Logger.h"
+#include "GUI/UI/UIGame.h"
+#include "Engine/Party.h"
 
 static std::string_view xrResultName(XrResult result) {
     switch (result) {
@@ -422,6 +424,164 @@ void VRManager::RenderDialogueMenu() {
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
     }
 
+    if (prevScissor) glEnable(GL_SCISSOR_TEST); else glDisable(GL_SCISSOR_TEST);
+    if (prevCullFace) glEnable(GL_CULL_FACE); else glDisable(GL_CULL_FACE);
+    if (prevDepthTest) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
+    if (prevBlend) glEnable(GL_BLEND); else glDisable(GL_BLEND);
+}
+
+void VRManager::RenderMinimalCharacterHUD() {
+    if (!pParty || current_screen_type != SCREEN_GAME || m_showGuiBillboard) return;
+
+    GLboolean prevBlend, prevDepthTest, prevCullFace, prevScissor;
+    glGetBooleanv(GL_BLEND, &prevBlend);
+    glGetBooleanv(GL_DEPTH_TEST, &prevDepthTest);
+    glGetBooleanv(GL_CULL_FACE, &prevCullFace);
+    glGetBooleanv(GL_SCISSOR_TEST, &prevScissor);
+
+    glViewport(0, 0, m_views[m_currentViewIndex].width, m_views[m_currentViewIndex].height);
+    glm::mat4 view = m_views[m_currentViewIndex].viewMatrix;
+
+    float left = tan(m_xrViews[m_currentViewIndex].fov.angleLeft);
+    float right = tan(m_xrViews[m_currentViewIndex].fov.angleRight);
+    float down = tan(m_xrViews[m_currentViewIndex].fov.angleDown);
+    float up = tan(m_xrViews[m_currentViewIndex].fov.angleUp);
+    float nearZ = 0.05f;
+    float farZ = 100.0f;
+    
+    glm::mat4 hudProjection(0.0f);
+    hudProjection[0][0] = 2.0f / (right - left);
+    hudProjection[1][1] = 2.0f / (up - down);
+    hudProjection[2][0] = (right + left) / (right - left);
+    hudProjection[2][1] = (up + down) / (up - down);
+    hudProjection[2][2] = -(farZ + nearZ) / (farZ - nearZ);
+    hudProjection[2][3] = -1.0f;
+    hudProjection[3][2] = -(2.0f * farZ * nearZ) / (farZ - nearZ);
+
+    glm::mat4 invView = glm::inverse(view);
+    glm::vec3 camPos = glm::vec3(invView[3]);
+    glm::vec3 camFwd = glm::vec3(invView * glm::vec4(0, 0, -1, 0));
+    glm::vec3 camUp = glm::vec3(invView * glm::vec4(0, 1, 0, 0));
+    glm::vec3 camRight = glm::vec3(invView * glm::vec4(1, 0, 0, 0));
+
+    // Base position: 1.5m away, lower part of screen
+    glm::vec3 basePos = camPos + camFwd * 1.5f - camUp * 0.35f; 
+    
+    // Width of total HUD area approx 1.0m?
+    // 4 characters. Spacing 0.25m.
+    // Offsets: -0.375, -0.125, +0.125, +0.375
+    float offsets[] = {-0.375f, -0.125f, 0.125f, 0.375f};
+    
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+    
+    InitOverlayQuad();
+    if (m_quadShader == 0 || m_quadVAO == 0) return;
+    
+    glUseProgram(m_quadShader);
+    glUniformMatrix4fv(glGetUniformLocation(m_quadShader, "view"), 1, GL_FALSE, &view[0][0]);
+    glUniformMatrix4fv(glGetUniformLocation(m_quadShader, "projection"), 1, GL_FALSE, &hudProjection[0][0]);
+    glActiveTexture(GL_TEXTURE0);
+    glUniform1i(glGetUniformLocation(m_quadShader, "screenTexture"), 0);
+    glBindVertexArray(m_quadVAO);
+
+    for (int i = 0; i < 4; ++i) {
+        if (i >= pParty->pCharacters.size()) break;
+        Character* pPlayer = &pParty->pCharacters[i];
+        GraphicsImage* pPortrait = nullptr;
+        
+        if (pPlayer->IsEradicated()) {
+            pPortrait = game_ui_player_face_eradicated;
+        } else if (pPlayer->IsDead()) {
+            pPortrait = game_ui_player_face_dead;
+        } else {
+            int idx = pPlayer->portraitImageIndex;
+            if (idx >= 0 && idx < 56) {
+                 pPortrait = game_ui_player_faces[i][idx];
+            }
+        }
+        
+        if (!pPortrait || !pPortrait->renderId().isValid()) continue;
+        
+        glm::vec3 charPos = basePos + camRight * offsets[i];
+        
+        // Draw Face
+        float faceScale = 0.0015f; 
+        float w = pPortrait->width() * faceScale;
+        float h = pPortrait->height() * faceScale;
+        
+        glm::mat4 model = glm::mat4(1.0f);
+        model = glm::translate(model, charPos);
+        model = model * glm::mat4(glm::mat3(invView)); // Rotation
+        model = glm::scale(model, glm::vec3(1.0f, -1.0f, 1.0f)); // Flip Y
+        
+        glm::mat4 faceModel = glm::scale(model, glm::vec3(w, h, 1.0f));
+        glUniformMatrix4fv(glGetUniformLocation(m_quadShader, "model"), 1, GL_FALSE, &faceModel[0][0]);
+        glBindTexture(GL_TEXTURE_2D, (unsigned int)pPortrait->renderId().value());
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+        
+        // Draw HP Bar (Left of face)
+        if (pPlayer->health > 0) {
+            double hpRatio = (double)pPlayer->health / (double)pPlayer->GetMaxHealth();
+            if (hpRatio > 1.0) hpRatio = 1.0;
+            
+            GraphicsImage* pBarTex = game_ui_bar_green;
+            if (hpRatio <= 0.25) pBarTex = game_ui_bar_red;
+            else if (hpRatio <= 0.5) pBarTex = game_ui_bar_yellow;
+            
+            if (pBarTex && pBarTex->renderId().isValid()) {
+                 float barW = 0.015f; // Thin bar
+                 float barH = h; // Same height as face
+                 
+                 glm::vec3 barPos = charPos - camRight * (w/2.0f + barW/2.0f + 0.005f);
+                 
+                 // Scale height by ratio
+                 float currentH = barH * (float)hpRatio;
+                 
+                 // Adjust Y to anchor at bottom
+                 glm::vec3 adjustedBarPos = barPos - camUp * (h/2.0f - currentH/2.0f);
+                 
+                 glm::mat4 barModel = glm::mat4(1.0f);
+                 barModel = glm::translate(barModel, adjustedBarPos);
+                 barModel = barModel * glm::mat4(glm::mat3(invView));
+                 barModel = glm::scale(barModel, glm::vec3(1.0f, -1.0f, 1.0f));
+                 barModel = glm::scale(barModel, glm::vec3(barW, currentH, 1.0f));
+                 
+                 glUniformMatrix4fv(glGetUniformLocation(m_quadShader, "model"), 1, GL_FALSE, &barModel[0][0]);
+                 glBindTexture(GL_TEXTURE_2D, (unsigned int)pBarTex->renderId().value());
+                 glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+            }
+        }
+        
+        // Draw Mana Bar (Right of face)
+        if (pPlayer->mana > 0) {
+            double mpRatio = (double)pPlayer->mana / (double)pPlayer->GetMaxMana();
+            if (mpRatio > 1.0) mpRatio = 1.0;
+            
+            GraphicsImage* pBarTex = game_ui_bar_blue;
+            if (pBarTex && pBarTex->renderId().isValid()) {
+                 float barW = 0.015f;
+                 float barH = h;
+                 
+                 glm::vec3 barPos = charPos + camRight * (w/2.0f + barW/2.0f + 0.005f);
+                 float currentH = barH * (float)mpRatio;
+                 glm::vec3 adjustedBarPos = barPos - camUp * (h/2.0f - currentH/2.0f);
+                 
+                 glm::mat4 barModel = glm::mat4(1.0f);
+                 barModel = glm::translate(barModel, adjustedBarPos);
+                 barModel = barModel * glm::mat4(glm::mat3(invView));
+                 barModel = glm::scale(barModel, glm::vec3(1.0f, -1.0f, 1.0f));
+                 barModel = glm::scale(barModel, glm::vec3(barW, currentH, 1.0f));
+                 
+                 glUniformMatrix4fv(glGetUniformLocation(m_quadShader, "model"), 1, GL_FALSE, &barModel[0][0]);
+                 glBindTexture(GL_TEXTURE_2D, (unsigned int)pBarTex->renderId().value());
+                 glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+            }
+        }
+    }
+    
     if (prevScissor) glEnable(GL_SCISSOR_TEST); else glDisable(GL_SCISSOR_TEST);
     if (prevCullFace) glEnable(GL_CULL_FACE); else glDisable(GL_CULL_FACE);
     if (prevDepthTest) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);

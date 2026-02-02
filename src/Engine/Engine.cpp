@@ -251,6 +251,7 @@ void Engine::Draw() {
                             VRManager::Get().RenderDialogueHUD();
                             VRManager::Get().RenderDialogueMenu();
                             VRManager::Get().RenderTurnBasedHUD();
+                            VRManager::Get().RenderMinimalCharacterHUD();
                         }
                         VRManager::Get().RenderOverlay3D();
 

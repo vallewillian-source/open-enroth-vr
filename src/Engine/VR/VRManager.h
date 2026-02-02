@@ -118,6 +118,7 @@ public:
     void RenderDialogueHUD();
     void RenderDialogueMenu();
     void RenderTurnBasedHUD();
+    void RenderMinimalCharacterHUD();
 
 private:
     void UpdateDialogueTexture();
