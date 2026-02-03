@@ -16,6 +16,7 @@ class GUIWindow_Transition : public GUIWindow {
 
  protected:
     void createButtons(const std::string &okHint, const std::string &cancelHint, UIMessageType confirmMsg, UIMessageType cancelMsg);
+    bool _prevShowGuiBillboard = false;
 };
 
 class GUIWindow_Travel : public GUIWindow_Transition {

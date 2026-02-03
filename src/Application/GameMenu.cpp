@@ -489,7 +489,7 @@ void Menu::MenuLoop() {
             const auto dims = render->GetRenderDimensions();
             if (VRManager::Get().GetMenuMouseState(dims.w, dims.h, menuX, menuY, menuLeftDown, menuRightDown)) {
                 mouse->setPosition({menuX, menuY});
-                
+
                 static bool prevMenuLeftDown = false;
                 if (menuLeftDown && !prevMenuLeftDown) {
                     mouse->UI_OnMouseLeftClick();

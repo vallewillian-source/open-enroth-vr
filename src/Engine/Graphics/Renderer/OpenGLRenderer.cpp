@@ -1457,7 +1457,6 @@ void OpenGLRenderer::DrawOutdoorSky() {
 
     if (pOutdoor->sky_texture) {
         int dimming_level = (uCurrentlyLoadedLevelType == LEVEL_OUTDOOR)? 31 : 0;
-        
         // VR Sky Rendering - World Locked Cylinder
         if (VRManager::Get().IsSessionRunning()) {
             GLboolean prevDepthMask;
@@ -1476,10 +1475,8 @@ void OpenGLRenderer::DrawOutdoorSky() {
             float centerX = (float)pParty->pos.x;
             float centerY = (float)pParty->pos.y;
             float zCenter = (float)pParty->pos.z + (float)pParty->eyeLevel;
-            
             int segments = 64; // Smoother circle
             float angleStep = (2.0f * 3.14159f) / segments;
-            
             // Texture scrolling animation
             float timeU = pMiscTimer->time().realtimeMillisecondsFloat() / 60000.0f; // Even slower
 
@@ -1532,46 +1529,50 @@ void OpenGLRenderer::DrawOutdoorSky() {
                 }
 
                 // Top Cap (Lid) - Connects top ring to center zenith point
-                // We use a dedicated V value (0.05) for the ring and 0.0 for the center 
+                // We use a dedicated V value (0.05) for the ring and 0.0 for the center
                 // to give some texture detail to the cap and avoid black border artifacts.
                 {
                     // Center Point (Zenith)
                     ForcePerVertex &v = _forcePerVertices.emplace_back();
-                    v.pos = Vec3f(centerX, centerY, zTop); 
-                    v.w = 1.0f; 
-                    v.texuv = Vec2f((u1 + u2) * 0.5f, 0.0f); 
-                    v.texw = 1.0f; 
-                    v.screenspace = 0.0f; 
-                    v.color = uTint; 
+                    v.pos = Vec3f(centerX, centerY, zTop);
+                    v.w = 1.0f;
+                    v.texuv = Vec2f((u1 + u2) * 0.5f, 0.0f);
+                    v.texw = 1.0f;
+                    v.screenspace = 0.0f;
+                    v.color = uTint;
                     v.texid = texid;
                 }
                 {
                     // Ring Point 2
                     ForcePerVertex &v = _forcePerVertices.emplace_back();
-                    v.pos = Vec3f(x2, y2, zTop); 
-                    v.w = 1.0f; 
-                    v.texuv = Vec2f(u2, 0.1f); 
-                    v.texw = 1.0f; 
-                    v.screenspace = 0.0f; 
-                    v.color = uTint; 
+                    v.pos = Vec3f(x2, y2, zTop);
+                    v.w = 1.0f;
+                    v.texuv = Vec2f(u2, 0.1f);
+                    v.texw = 1.0f;
+                    v.screenspace = 0.0f;
+                    v.color = uTint;
                     v.texid = texid;
                 }
                 {
                     // Ring Point 1
                     ForcePerVertex &v = _forcePerVertices.emplace_back();
-                    v.pos = Vec3f(x1, y1, zTop); 
-                    v.w = 1.0f; 
-                    v.texuv = Vec2f(u1, 0.1f); 
-                    v.texw = 1.0f; 
-                    v.screenspace = 0.0f; 
-                    v.color = uTint; 
+                    v.pos = Vec3f(x1, y1, zTop);
+                    v.w = 1.0f;
+                    v.texuv = Vec2f(u1, 0.1f);
+                    v.texw = 1.0f;
+                    v.screenspace = 0.0f;
+                    v.color = uTint;
                     v.texid = texid;
                 }
             }
 
             DrawForcePerVerts();
             glDepthMask(prevDepthMask);
-            if (prevCullFace) glEnable(GL_CULL_FACE); else glDisable(GL_CULL_FACE);
+            if (prevCullFace) {
+                glEnable(GL_CULL_FACE);
+            } else {
+                glDisable(GL_CULL_FACE);
+            }
             return;
         }
 

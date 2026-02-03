@@ -16,6 +16,7 @@
 #include "Engine/Time/Timer.h"
 #include "Engine/Tables/TransitionTable.h"
 #include "Engine/mm7_data.h"
+#include "Engine/VR/VRManager.h"
 
 #include "GUI/GUIButton.h"
 #include "GUI/GUIFont.h"
@@ -62,6 +63,11 @@ GUIWindow_Transition::GUIWindow_Transition(WindowType windowType, ScreenType scr
 
     prev_screen_type = current_screen_type;
     current_screen_type = screenType;
+
+    if (VRManager::Get().IsInitialized()) {
+        _prevShowGuiBillboard = VRManager::Get().GetShowGuiBillboard();
+        VRManager::Get().SetShowGuiBillboard(true);
+    }
 }
 
 void GUIWindow_Transition::createButtons(const std::string &okHint, const std::string &cancelHint, UIMessageType confirmMsg, UIMessageType cancelMsg) {
@@ -88,6 +94,10 @@ void GUIWindow_Transition::Release() {
     }
 
     current_screen_type = prev_screen_type;
+
+    if (VRManager::Get().IsInitialized()) {
+        VRManager::Get().SetShowGuiBillboard(_prevShowGuiBillboard);
+    }
 
     GUIWindow::Release();
 }

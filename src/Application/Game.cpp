@@ -144,11 +144,9 @@ int Game::run() {
                         int menuX = 0, menuY = 0;
                         bool menuLeftDown = false, menuRightDown = false;
                         const auto dims = render->GetRenderDimensions(); // Re-get dims just to be safe, though used above
-                        
                         if (VRManager::Get().GetMenuMouseState(dims.w, dims.h, menuX, menuY, menuLeftDown, menuRightDown)) {
                              if (engine->mouse) {
-                                 engine->mouse->setPosition({menuX, menuY});
-                                 
+                                engine->mouse->setPosition({menuX, menuY});
                                  static bool prevMenuLeftDown = false;
                                  if (menuLeftDown && !prevMenuLeftDown) {
                                      if (current_screen_type == SCREEN_VIDEO) {

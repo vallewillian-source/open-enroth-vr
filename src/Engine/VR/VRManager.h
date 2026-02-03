@@ -152,6 +152,9 @@ private:
     float m_overlayHitX = 0.0f;
     float m_overlayHitY = 0.0f;
 
+    // Stabilization frames for World-Locked overlay to allow user to settle
+    int m_overlayStabilizationFrames = 0;
+
 
     bool CreateInstance();
     bool GetSystem();

@@ -313,7 +313,7 @@ void GUIWindow_Dialogue::Update() {
                 GUIButton *pButton = pDialogueWindow->GetControl(i);
                 if (!pButton)
                     break;
-                
+
                 // Collect for VR
                 if (!pButton->sLabel.empty()) {
                     vrOptions.push_back({pButton->sLabel, (int)pButton->msg_param, (int)pButton->msg});

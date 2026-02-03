@@ -44,8 +44,6 @@
 
 #include "Io/Mouse.h"
 #include "Io/KeyboardInputHandler.h"
-#include "Engine/VR/VRManager.h"
-
 #include "Media/Audio/AudioPlayer.h"
 #include "Media/MediaPlayer.h"
 

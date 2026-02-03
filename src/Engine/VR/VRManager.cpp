@@ -173,8 +173,9 @@ void VRManager::SetDebugHouseIndicator(bool enabled) {
 void VRManager::SetShowGuiBillboard(bool enabled) {
     if (enabled && !m_showGuiBillboard) {
         m_overlayPoseInitialized = false; // Reset World-Locked pose
+        m_overlayStabilizationFrames = 100; // Allow 100 frames (~1.5s) of stabilization/head-follow before locking
         if (logger) {
-            logger->info("VRManager: ShowGuiBillboard ENABLED (World-Locked Overlay)");
+            logger->info("VRManager: ShowGuiBillboard ENABLED (World-Locked Overlay with Stabilization)");
         }
     }
     m_showGuiBillboard = enabled;
@@ -1792,9 +1793,9 @@ void VRManager::RenderOverlay3D() {
         localProjection[3][2] = -(2.0f * farZ * nearZ) / (farZ - nearZ);
 
         // Calculate Model Matrix - World Locked (Fixed in Environment)
-        // We update the position only ONCE when the screen becomes active
-        if (!m_overlayPoseInitialized) {
-             // Capture head position ONCE
+        // We update the position when the screen becomes active OR during stabilization period
+        if (!m_overlayPoseInitialized || m_overlayStabilizationFrames > 0) {
+             // Capture head position
              glm::mat4 invView = glm::inverse(view); // view is current viewMatrix
              glm::vec3 camPos = glm::vec3(invView[3]);
              glm::vec3 camFwd = glm::vec3(invView * glm::vec4(0, 0, -1, 0));
@@ -1821,9 +1822,13 @@ void VRManager::RenderOverlay3D() {
 
              m_overlayPoseInitialized = true;
              
-             if (logger) {
-                 logger->info("VRManager: Overlay Pose Initialized (World Locked - Y-Up Horizon) at ({}, {}, {})", 
-                     m_overlayWorldPos.x, m_overlayWorldPos.y, m_overlayWorldPos.z);
+             if (m_overlayStabilizationFrames > 0) {
+                 m_overlayStabilizationFrames--;
+             } else {
+                 if (logger) {
+                     logger->info("VRManager: Overlay Pose LOCKED (World Locked - Y-Up Horizon) at ({}, {}, {})", 
+                         m_overlayWorldPos.x, m_overlayWorldPos.y, m_overlayWorldPos.z);
+                 }
              }
         }
 
