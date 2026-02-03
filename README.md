@@ -1,137 +1,124 @@
 # Might and Magic 7 VR Mod (OpenEnroth)
 
-This project is a fork of [OpenEnroth](https://github.com/OpenEnroth/OpenEnroth) aiming to implement Virtual Reality support for **Might and Magic VII** using **OpenXR**.
+Fork of OpenEnroth adding Virtual Reality support for **Might and Magic VII** using **OpenXR**.
 
-## 🚀 Current Status: MVP (Minimum Viable Product)
+## Current Status: MVP
+- **3DOF tracking**: HMD orientation controls camera.
+- **Stereoscopic rendering**: full 3D world for both eyes.
+- **Input**: VR controllers or keyboard/mouse.
+- **Engine**: OpenEnroth (modern C++ reimplementation of MM7).
+- **Backend**: OpenXR (SteamVR, Oculus/Meta, WMR).
 
-- **3DOF Tracking**: Headset orientation controls the in-game camera view.
-- **Stereoscopic Rendering**: Full 3D world rendering for both eyes (Left/Right).
-- **Input**: VR controllers or standard Keyboard & Mouse controls.
-- **Engine**: Based on OpenEnroth (modern C++ reimplementation of MM7 engine).
-- **Backend**: OpenXR (Compatible with SteamVR, Oculus/Meta, Windows Mixed Reality).
-
-> **Note**: This is an early development version. The HUD (User Interface) is currently hidden in VR to prevent rendering artifacts, and positional tracking (6DOF) is not yet implemented.
-
----
-
-## 🛠 Prerequisites
-
-To run or build this mod, you need:
-
-1.  **Game Data**: The original Might and Magic VII game assets (`ANIMS`, `DATA`, `MUSIC`, `SOUNDS`).
-2.  **VR Runtime**: [SteamVR](https://store.steampowered.com/app/250820/SteamVR/) (Recommended) or any OpenXR-compliant runtime.
-3.  **Development Tools** (only for building):
-    - **CMake** 3.20 or newer.
-    - **C++ Compiler** (Visual Studio 2019/2022 recommended for Windows).
-    - **SDL3** (Used for window/context management).
+**Note**: Early development. HUD is hidden in VR to avoid artifacts. Positional tracking (6DOF) not implemented.
 
 ---
 
-## 🎮 Controls (VR)
+## Prerequisites
+1. **Game data**: MM7 assets (`ANIMS`, `DATA`, `MUSIC`, `SOUNDS`).
+2. **VR runtime**: SteamVR (recommended) or any OpenXR runtime.
+3. **Build tools** (only for building):
+   - **CMake** 3.20+ (VR docs) / **CMake** 3.27+ (OpenEnroth docs).
+   - **C++ compiler**: VS 2019/2022 recommended for VR; minimums: VS 2022, GCC 13, AppleClang 15/Clang 15.
+   - **SDL3** (window/context).
 
-The mod features a modernized VR locomotion system designed for comfort and accessibility:
+Main dependencies (OpenEnroth):
+- SDL3, FFmpeg, OpenAL Soft, Zlib.
 
-### **Left Controller (Locomotion)**
-*   **Stick Up/Down**: Move Forward / Backward.
-*   **Stick Left/Right**: **Strafe Left / Right** (Sideways movement).
-*   **Diagonal Input**: Full 360° directional movement (combined Forward/Back and Strafe).
+Optional:
+- Python 3.x for style checks.
 
-### **Right Controller (View & Action)**
-*   **Stick Left/Right**: Snap/Smooth Turn.
-*   **Stick Up**: **Jump**.
-*   **Trigger**: Interact / Select (Menu & World).
-*   **Grip/Button**: Combat / Cast / Quick Cast (mapped to standard actions).
-
----
-
-## ⚙️ How to Build
-
-1.  **Clone the repository**:
-    ```bash
-    git clone https://github.com/vallewillian-source/mm7_vr.git
-    cd mm7_vr
-    ```
-
-2.  **Configure with CMake**:
-    ```bash
-    mkdir build
-    cd build
-    cmake ..
-    ```
-    *The build system will automatically fetch the OpenXR SDK and other necessary dependencies via FetchContent.*
-
-3.  **Compile**:
-    Open the generated solution in Visual Studio or run:
-    ```bash
-    cmake --build . --config Release
-    ```
-
-4.  **Install**:
-    Copy the compiled `OpenEnroth.exe` to your MM7 game folder (where the `DATA` folder is located).
+IDEs tested: VS 2022+, VS Code 2022+, CLion 2022+.
 
 ---
 
-## 🎮 How to Run (SteamVR)
+## Controls (VR)
+**Left controller (locomotion)**
+- Stick up/down: move forward/back.
+- Stick left/right: strafe.
+- Diagonal input: 360° movement.
 
-1.  **Start SteamVR**: Ensure your VR headset is connected and recognized by SteamVR.
-2.  **Launch the Game**: Run `OpenEnroth.exe`.
-3.  **Play**: The game should automatically render to your headset.
-    *   If the headset display is black, check if SteamVR is set as your default OpenXR runtime (`SteamVR Settings > Developer > Set SteamVR as OpenXR Runtime`).
-    *   Use **Keyboard/Mouse** to play standard MM7, but with the immersive view of VR.
-
----
-
-## 🧠 Technical Implementation Details
-
-This VR implementation integrates deeply with the OpenEnroth engine while keeping the VR subsystem modular.
-
-### 1. VR Subsystem (`src/Engine/VR/`)
-We introduced a singleton class `VRManager` to handle all OpenXR interactions:
-*   **OpenXR Integration**: Manages the `XrInstance`, `XrSession`, and `XrSpace`.
-*   **Swapchain Management**: Handles double-buffered swapchains for stereo rendering.
-*   **Coordinate System Conversion**: Converts OpenXR's **Y-Up** (Right-Handed) coordinate system to OpenEnroth's **Z-Up** system on the fly.
-*   **Windows 11 Compatibility**: Utilizes **SDL3** to reliably retrieve native window handles (`HWND`) and OpenGL contexts (`HGLRC`) required for OpenXR session creation on modern Windows versions.
-
-### 2. Render Pipeline Interventions
-The rendering flow was modified to inject VR frames before the main desktop presentation.
-
-#### **Engine Loop (`src/Engine/Engine.cpp`)**
-The `Engine::Draw()` method was modified to support a multi-pass render loop:
-1.  **Check VR State**: If VR is initialized, begin the OpenXR frame.
-2.  **Stereo Pass**: Loop through both eyes (Index 0 and 1):
-    *   Acquire OpenXR Swapchain Image.
-    *   Bind the VR Framebuffer (FBO).
-    *   **Render World**: Calls `drawWorld()` with VR-specific flags.
-    *   Release Swapchain Image.
-3.  **Submit Frame**: Calls `xrEndFrame` to send layers to the compositor.
-4.  **Desktop Pass**: Continues to render the standard view to the desktop window for debugging/spectator view.
-
-#### **Renderer (`src/Engine/Graphics/Renderer/OpenGLRenderer.cpp`)**
-Modifications were made to the core OpenGL renderer to support external view matrices:
-*   **Matrix Override**: `_set_3d_modelview_matrix` and `_set_3d_projection_matrix` now check `VRManager::IsRenderingVREye()`. If true, they bypass the standard `Camera3D` calculations and use the matrices provided by `VRManager` (derived from HMD pose).
-*   **State Management**: `BeginScene3D` was updated to respect the currently bound VR framebuffer instead of forcing a reset to the default backbuffer.
-
-### 3. Aprendizados: Convergência Estéreo e Conforto Visual
-Durante o desenvolvimento das telas de interface (Houses/Menus), estabelecemos diretrizes críticas para o posicionamento de elementos 2D em espaço 3D:
-
-*   **Regra da Convergência (Profundidade):** 
-    *   Para afastar um objeto e torná-lo mais confortável, as imagens de cada olho devem se mover para **longe do nariz** (eixos de visão mais paralelos).
-    *   No código, isso significa **diminuir** o `convergenceOffset` (valor maior no divisor, ex: `w / 5.0`).
-    *   Mover as imagens para **perto do nariz** (aumentar offset) causa a sensação de que o objeto está "colado na cara" e gera fadiga ocular.
-*   **Conflito Acomodação-Vergência:** As lentes de VR têm foco fixo (geralmente 2 metros). Posicionar telas simulando essa distância através da convergência é essencial para evitar náusea.
-*   **Tamanho Angular:** A percepção de distância é reforçada pelo tamanho. Uma tela maior com eixos paralelos parece uma tela de cinema distante; uma tela pequena com eixos cruzados parece um celular perto do rosto.
-*   **Ancoragem Mundial (World-Locking):** Para interfaces de tela cheia (como casas), a ancoragem fixa na cabeça (Head-Locked) pode ser cansativa. Ancorar a tela no espaço 3D no momento da ativação permite que o usuário explore a interface naturalmente movendo os olhos e a cabeça, reduzindo o esforço visual.
+**Right controller (view/action)**
+- Stick left/right: snap/smooth turn.
+- Stick up: jump.
+- Trigger: interact/select.
+- Grip/button: combat/cast/quick cast.
 
 ---
 
-### 4. Build System (`CMakeLists.txt`)
-*   Added `FetchContent` logic to automatically download and link the **OpenXR SDK**.
-*   Created a static library target `engine_vr` to encapsulate VR logic.
+## Build (VR)
+1. Clone:
+   ```bash
+   git clone https://github.com/vallewillian-source/mm7_vr.git
+   cd mm7_vr
+   ```
+2. Configure:
+   ```bash
+   mkdir build
+   cd build
+   cmake ..
+   ```
+   FetchContent downloads OpenXR SDK + deps.
+3. Compile:
+   ```bash
+   cmake --build . --config Release
+   ```
+4. Install: copy `OpenEnroth.exe` to your MM7 folder (where `DATA` is).
 
-### 5. Mandatory Rules for Vibe Coding Models
+---
+
+## Run (SteamVR)
+1. Start SteamVR.
+2. Run `OpenEnroth.exe`.
+3. If headset is black, set SteamVR as default OpenXR runtime:
+   `SteamVR Settings > Developer > Set SteamVR as OpenXR Runtime`.
+
+Keyboard/mouse still works for standard MM7 in VR view.
+
+---
+
+## VR Technical Summary
+### VR Subsystem (`src/Engine/VR/`)
+- `VRManager` singleton for OpenXR (`XrInstance`, `XrSession`, `XrSpace`).
+- Stereo swapchains (double-buffered).
+- Converts OpenXR **Y-Up** (RH) to OpenEnroth **Z-Up**.
+- Uses SDL3 to get `HWND`/`HGLRC` reliably on Windows 11.
+
+### Render Pipeline Changes
+**Engine loop (`src/Engine/Engine.cpp`)**
+1. If VR initialized, begin OpenXR frame.
+2. For each eye:
+   - Acquire swapchain image.
+   - Bind VR FBO.
+   - `drawWorld()` with VR flags.
+   - Release swapchain image.
+3. `xrEndFrame`.
+4. Render desktop view (debug/spectator).
+
+**OpenGL renderer (`src/Engine/Graphics/Renderer/OpenGLRenderer.cpp`)**
+- `_set_3d_modelview_matrix` and `_set_3d_projection_matrix` use `VRManager` matrices when `IsRenderingVREye()`.
+- `BeginScene3D` respects currently bound VR FBO (does not reset to backbuffer).
+
+---
+
+## Stereo Convergence & Comfort (UI in 3D)
+- To push objects farther and improve comfort, move each eye image **away from the nose** (more parallel), i.e. **decrease** `convergenceOffset` (bigger divisor, e.g. `w / 5.0`).
+- Moving images **toward the nose** increases strain (feels too close).
+- VR lenses focus at fixed distance (~2m). Convergence should simulate this to avoid nausea.
+- Angular size matters: large + parallel = far (cinema); small + crossed = near (phone).
+- World-locked full-screen UIs are more comfortable than head-locked.
+
+---
+
+## Build System (`CMakeLists.txt`)
+- `FetchContent` downloads OpenXR SDK.
+- Static library target `engine_vr` encapsulates VR logic.
+
+---
+
+## Mandatory Rules for Vibe Coding Models
 - Never compile automatically generated code.
-- Always use explicit casts instead of implicit casts.
-- Never use `dynamic_cast` for type checking.
+- Always use explicit casts (no implicit casts).
+- Never use `dynamic_cast`.
 - Always use `static_cast` for type conversion.
 - Never use `reinterpret_cast` for type conversion.
 
@@ -139,309 +126,192 @@ Durante o desenvolvimento das telas de interface (Houses/Menus), estabelecemos d
 
 # Might and Magic Trilogy (Original OpenEnroth Documentation)
 
-# Development HOWTO
+## Development HOWTO
+This section describes the development process and is required reading for contributors.
 
-This document describes the development process we're following. It's required reading for anyone intending to contribute.
-
+---
 
 ## Dependencies
+Main: SDL3, FFmpeg, OpenAL Soft, Zlib.  
+Prebuilt dependencies are used by default and resolved during CMake.
 
-Main dependencies:
-* [SDL3](https://github.com/libsdl-org/SDL) — cross-platform media framework;
-* [FFmpeg](https://github.com/FFmpeg/FFmpeg) — video support;
-* [OpenAL Soft](https://github.com/kcat/openal-soft) — audio support;
-* [Zlib](https://github.com/madler/zlib) — compression.
+Additional:
+- CMake 3.27+.
+- Python 3.x (optional, style checks).
 
-By default, we are using prebuilt dependencies, and they are resolved automatically during the cmake phase.
+Minimum compilers:
+- VS 2022, GCC 13, AppleClang 15 / Clang 15.
 
-Additional dependencies:
-* [CMake 3.27+](https://cmake.org/download/).
-* [Python 3.x](https://www.python.org/downloads/) (optional, for style checks).
+IDEs tested:
+- Visual Studio 2022+,
+- Visual Studio Code 2022+,
+- CLion 2022+.
 
-Minimum required compiler versions are as follows:
-* Visual Studio 2022;
-* GCC 13;
-* AppleClang 15 or Clang 15.
-
-The following IDEs have been tested and should work fine:
-* Visual Studio (2022 or later);
-* Visual Studio Code (2022 or later);
-* CLion (2022 or later).
-
-
-## Building on \*nix platforms
-
-This project uses the [CMake](https://cmake.org) build system.  Use the following commands to clone the repository and build OpenEnroth:
-
-```
-$ git clone --recurse-submodules --shallow-submodules https://github.com/vallewillian-source/open-enroth-vr.git
-$ cd open-enroth-vr
-$ cmake -B build -S . -DCMAKE_BUILD_TYPE=Debug
-$ cmake --build build
-```
-
-To cross-compile for 32-bit x86, you can pass `-m32` via compiler flags to cmake. In the snipped above that would mean running `export CFLAGS="-m32" CXXFLAGS="-m32"` first.
-
-You can also select platform dependent [generator](https://cmake.org/cmake/help/latest/manual/cmake-generators.7.html) for your favorite IDE.
-
-### Additional Notes for MacOS
-* Make sure you have the latest Xcode installed. Do this through the App Store or by downloading it from the [Apple Developer website](https://developer.apple.com/download/more/).
-
+---
 
 ## Building on Windows
+- Install Git and Visual Studio 2022.
+- Windows SDK v10.0.20348.0+.
+- Clone/fork `https://github.com/vallewillian-source/open-enroth-vr`.
+- CMake: standalone or VS-provided; add to PATH if needed.
+- Open folder in VS, pick x32/x64, wait for CMake, set startup `OpenEnroth.exe`, run.
+- To disable prebuilt deps: `OE_USE_PREBUILT_DEPENDENCIES=OFF` and provide your own (e.g. vcpkg).
 
-* Get git (`https://git-scm.com/download/win`) and Visual Studio 2022.
-* Make sure you have Windows SDK v10.0.20348.0 or higher.
-* Clone, fork or download the repo `https://github.com/vallewillian-source/open-enroth-vr`.
-* Setup CMake:
-  * either install standalone cmake from the official website,
-  * or add Microsoft one (that's coming with the VS installation) to your PATH environment variable (e.g `c:\Program Files\Microsoft Visual Studio\2022\<edition>\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin`). 
-* Open the folder in Visual Studio.
-* Select build configuration (x32 or x64) and wait for CMake configuration to complete.
-* Select startup item as `OpenEnroth.exe`.
-* Run!
+**Note**: VS may not sync submodules across branches; run `git submodule update --init` if needed.
 
-If you wish you can also disable prebuilt dependencies by turning off `OE_USE_PREBUILT_DEPENDENCIES` cmake option and pass your own dependencies source, e.g. via [vcpkg](https://github.com/microsoft/vcpkg) integration.
+---
 
-__Be aware__ that Visual Studio has a bug with git submodules not syncing between branches.
-So when checking out the branch or switching to different branch you may need to run the following command manually: `git submodule update --init`
+## Coding Style
+Based on Google C++ Style Guide. PRs fail on style issues.
 
-
-## Coding style
-
-For the C++ code we are following the [Google C++ Style Guide](http://google.github.io/styleguide/cppguide.html). Source code is automatically checked against it and pull request will fail if you don't follow it.
-
-To perform a style check before pushing anything you can build `check_style` target. In Visual Studio you can do that by going to ***Solution Explorer → Change Views → CMake targets***. Right click and build `check_style`, errors will be listed in output.
-
-We also follow some additional style preferences, as listed below.
+**Style checks**: build `check_style` target (VS: Solution Explorer -> Change Views -> CMake targets).
 
 Documentation:
-* Documentation should be in doxydoc format with `@` used for tags, and starting with `/**` comment introducer.
-* Documentation should be written in English.
-* Please leave original function offsets intact. If you have a chance, move them to doxygen comments using `@offset` doxygen tag (e.g. `@offset 0xCAFEBEEF`).
+- Doxygen format with `/**` and `@` tags.
+- English.
+- Preserve original function offsets; move to `@offset` tag if possible.
 
 Naming:
-* Use `MM_` prefix for macro naming. Macro names should be in `SNAKE_CASE_ALL_CAPS`.
-* Use `SNAKE_CASE_ALL_CAPS` for `enum` values. E.g. `ITEM_CRATE_OF_ARROWHEADS`, `ITEM_SLOT_RING6`.
-* For naming enum values, prefix the name with the name of the type, e.g. `MONSTER_TROLL_A` for a value of `enum class MonsterId`. For values that are then used in array bounds, put the `_FIRST`, `_LAST` and `_COUNT` right after the name of the type, e.g. `ITEM_FIRST_MESSAGE_SCROLL`.
-* Use `CamelCase` for everything else.
-* Type names should start with a capital letter. E.g. `IndexedArray`, `InputAction`, `LogLevel`. This applies to all types, including classes, structs, enums and typedefs, with certain exceptions as listed below.
-* Method & function names should start with a lowercase letter. E.g. `Vec3::length`, `gridCellToWorldPosX`, `ceilingHeight`.
-* Variable names should start with a lowercase letter. E.g. `int monsterCount = level->monsterCount()`.
-* Names of private members should start with an underscore to visually distinguish them from variables without having to spell out `this->` every single time. E.g. `_initialized = true`, where `_initialized` is a member field.
-* Note that the above doesn't apply to POD-like types as for such types all members are public and are named just like ordinary variables.
-* Exceptions to the rules above are STL-compatible interfaces, which should follow STL naming rules. So it's `value_type` for iterator value type, and `push_back` for a method that's adding an element to a container.
+- Macros: `MM_` prefix, `SNAKE_CASE_ALL_CAPS`.
+- `enum` values: `SNAKE_CASE_ALL_CAPS`, prefixed by type (e.g. `MONSTER_TROLL_A`).
+- Enum bounds: `_FIRST`, `_LAST`, `_COUNT` after type name (e.g. `ITEM_FIRST_MESSAGE_SCROLL`).
+- `CamelCase` for types. Methods/variables start lowercase.
+- Private members start with `_` (except POD-like types).
+- STL-compatible interfaces use STL naming (`value_type`, `push_back`).
 
-Code formatting:
-* `*` and `&` in type declarations should be preceded by a space. So it's `char *string`, and not `char* string`.
+Formatting:
+- `char *string` (space before `*`/`&`).
 
 Language features:
-* Use `using Alias = Type` instead of `typedef Type Alias`.
-* Use `enum class`es followed by `using enum` statements instead of ordinary `enum`s. This provides type safety without changing the syntax. For flags, use `Flags` class.
-* It's OK to use plain `enum`s if you really need to have implicit casts to integer types, but this is a very rare use case. If you're using `enum` values to index into some array, consider using `enum class` coupled with `IndexedArray`.
-* Make your code speak for itself when it comes to ownership. If a function takes ownership of one of its parameters, it should take `std::unique_ptr` by value. If it allocates its result and passes ownership to the caller, then it should return `std::unique_ptr`.
-* Use an `int` unless you need something else. Don’t try to avoid negative values by using `unsigned`, this implies many changes to the usual behavior of integers and can be a source of bugs. See a section in [core guidelines](https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines#arithmetic) for more info. However, don't overdo it, use `size_t` for indexing into STL containers.
-* For string function parameters, use `std::string_view` passed by value. 
-  * In general, you shouldn't bother optimizing code paths where you might save an allocation by moving in an `std::string` or passing it by const reference, the performance benefits are almost always negligible.
-  * Use `TransparentString*` classes if you need to index into a string map using `std::string_view` keys.
-  * However, feel free to use `std::string` or `const std::string &` parameters where it makes your code simpler (e.g. by avoiding jumping through hoops if you'll need to create an intermediate `std::string` object anyway).
-  * C++ is notoriously bad when it comes to string concatenation (you can't concatenate `std::string_view` with a string literal using `operator+`, and never will). In most cases you should be fine just using `fmt::format` for this. If `fmt::format` looks like an overkill, use `join` from `Utility/String/Transformations.h`.
-* We generally refrain from using namespaces because OpenEnroth is a relatively small codebase, and we don't need the measures advocated by the Google style guide to prevent name clashes.
-  * We don't put user-facing classes into namespaces because it ultimately leads to code where you have `ns1::Context` and `ns2::Context`, and when coupled with a bit of `using` here and there this makes the code harder to read and reason about. Please spend some time coming up with good names for your classes instead.
-  * We sometimes use namespaces to group related functions, e.g. see `namespace lod`.
-  * Exception is `namespace detail` that you're encouraged to use to hide implementation details and to prevent cluttering of the global namespace.
-* `std::string`s in the code are assumed to be UTF8-encoded as advised by [utf8everywhere](https://utf8everywhere.org/). On Windows this is ensured by the `UnicodeCrt` class that sets up the standard library to use UTF8 encoding. Thus, you don't need to bother with `std::u8string`, and you can safely convert `std::filesystem::path` to string by calling `path.string()`.
-  * This is not yet true for in-game strings. E.g. strings for the Russian localization are in CP1251.
+- `using Alias = Type` (no `typedef`).
+- Prefer `enum class` + `using enum`. Use `Flags` for flags.
+- Avoid `unsigned` unless needed; prefer `int`. Use `size_t` for STL indices.
+- String params: `std::string_view` by value; use `fmt::format` or `join`.
+- Avoid namespaces in general; allow `detail` or small groupings (`lod`).
+- Strings are UTF-8; on Windows via `UnicodeCrt`. `path.string()` is OK.
 
 Error handling:
-* Use `assert`s to check for coding errors and conditions that must never be false, no matter how the program is run.
-* Use exceptions for non-recoverable errors. It's usually OK to just throw an instance of `class Exception`.
-* Use `Logger` for warnings and recoverable errors.
-* We don't yet have a mechanism for displaying errors to the user through the UI. This document will be updated once this is implemented.
+- `assert` for invariants.
+- Exceptions (e.g. `Exception`) for non-recoverable errors.
+- `Logger` for warnings/recoverable errors.
 
-There is a lot of code in the project that doesn't follow these conventions. Please feel free to fix it, preferably not mixing up style and logical changes in the same PR.
-
+---
 
 ## Code Organization
+- `thirdparty`: external libs.
+- `Utility`: generic utilities (depends only on `thirdparty`).
+- `Library`: independent libs built on `Utility`.
+- `Library/Platform`: SDL platform abstraction.
+- 1 `CMakeLists.txt` per folder (except `/android`, `/CMakeModules`, `/resources`).
+- 1 class per source file (exceptions: small structs/helper classes; function-only files).
 
-OpenEnroth code is broken up as follows:
-* `thirdparty` – this is where all external libraries go.
-* `Utility` – generic utility classes and functions go here. Utility classes should be domain-independent (e.g. should make sense in a context of some other project) and should depend only on `thirdparty` libraries.
-* `Library` – collection of independent libraries that the engine is built on top of. Code here can depend on `Utility` and other libraries in `Library`. However, there should be no cyclical dependencies between libraries here.
-* `Library/Platform` is our platform abstraction layer on top of SDL.
-* The rest of the code is currently pretty tangled with each part depending on each other. This document will be updated once we have some progress there.
-
-Our basic guidelines for code organization are:
-* One `CMakeLists.txt` file per folder. Exceptions are /android, /CMakeModules and /resources.
-* One class per source file, with the name of the source file matching the name of the class. Exceptions are small structs, which are usually easier to pack into a single source file, and helper classes, which generally should stay next to the main class. Note that this guideline doesn't apply to source files that mainly declare functions.
-
+---
 
 ## Testing
+Policy: add tests for fixable bugs when possible.
 
-We strive for a good test coverage of the project, and while we're not there yet, the current policy is to add tests for all the bugs we fix, as long as the fix is testable. E.g. graphical glitches are generally very hard to test, but we have the infrastructure to test game logic and small isolated classes.
+**Unit tests**: Google Test. Examples in `src/Utility/Tests`.  
+Run: build `OpenEnroth_UnitTest`, execute `<build-dir>/test/Bin/UnitTest/OpenEnroth_UnitTest`.
 
-Tests in OpenEnroth fall into two categories:
-* Unit tests. These are a standard breed of tests, written using Google Test. You can see some examples in `src/Utility/Tests`.
-* Game tests. If you're familiar with how testing is done these days for complex mobile apps, then you can consider game tests a variation of UI tests that's specific to our project. Game tests need game assets to run.
+**Game tests**: instrumented engine; events injected between frames; assets required.
+Workflow:
+1. Fix bug.
+2. Load save that reproduces it.
+3. `Ctrl+Shift+R` start trace recording.
+4. Reproduce.
+5. `Ctrl+Shift+R` stop -> `trace.json`, `trace.mm7`.
+6. Rename and PR to `OpenEnroth_TestData`.
+7. Update reference tag in `test/Bin/CMakeLists.txt`.
+8. Add test using `TestController::playTraceFromTestData`.
 
-Game tests work by instrumenting the engine, and then running test code in between the game frames. This code usually sends events to the engine (e.g. mouse clicks), which are then processed by the engine in the next frame, but it can do pretty much anything else – all of engine's data is accessible and writable from inside the game test.
+Other notes:
+- For non-standard FPS in trace recording, set `debug.trace_frame_time_ms`.
+- Run game tests headless: set `OPENENROTH_MM7_PATH`, build `Run_GameTest_Headless_Parallel`.
+- Or run `OpenEnroth_GameTest` with args; `--headless` supported.
+- Use `--gtest_filter=<suite>.<name>` (must include `=`).
+- Replay trace: `OpenEnroth play --speed 0.5 <trace.json>`.
 
-As typing out all the events to send inside the test code can be pretty tedious, we also have an event recording functionality, so that the test creation workflow usually looks as follows:
-* Fix the bug.
-* Load a save that used to reproduce the bug that you've just fixed.
-* Press `Ctrl+Shift+R` to start recording an event trace. Check logs to make sure that trace recording has started.
-* Perform the steps that used to reproduce the bug.
-* Press `Ctrl+Shift+R` again to stop trace recording. You will get two files generated in the current folder – `trace.json` and `trace.mm7`.
-* Rename them into something more suiting (e.g. `issue_XXX.json` and `issue_XXX.mm7`) and create a PR to the [OpenEnroth_TestData](https://github.com/OpenEnroth/OpenEnroth_TestData) repo. 
-* Once it's merged update the reference tag in the corresponding [CMakeLists.txt](https://github.com/OpenEnroth/OpenEnroth/blob/master/test/Bin/CMakeLists.txt) in the main repo.
-* Create a new test case in one of the game test files in [the game tests folder](https://github.com/OpenEnroth/OpenEnroth/tree/master/test/Bin/GameTest).
-* Use `TestController::playTraceFromTestData` to play back your trace, and add the necessary checks around it.
+### Random state desynchronized
+If intentional logic changes break traces:
+1. Fork/clone `OpenEnroth_TestData`, clean branch.
+2. `OpenEnroth retrace <trace.json>` (can pass multiple).
+3. Commit/PR to TestData.
+4. Update `GIT_TAG` and `GIT_REPOSITORY` in `test/Bin/CMakeLists.txt`.
+5. Commit/push main PR.
 
-If you need to record a trace with non-standard FPS (e.g. if an issue doesn't reproduce on lower FPS values), set `debug.trace_frame_time_ms` config value before starting OpenEnroth for recording.
+---
 
-To run all unit tests locally, build a `OpenEnroth_UnitTest` cmake target and run `<build-dir>/test/Bin/UnitTest/OpenEnroth_UnitTest`.
+## Scripting (Lua)
+Scripts in `resources/scripts`.
 
-To run all game tests locally, set `OPENENROTH_MM7_PATH` environment variable to point to the location of the game assets, then build `Run_GameTest_Headless_Parallel` cmake target. Alternatively, you can build `OpenEnroth_GameTest`, and run it manually, passing the paths to both game assets and the test data via command line. Run `OpenEnroth_GameTest --help` for a list of options. Note that you can pass `--headless` to run tests in headless mode. You can use the test data from `<build-dir>/test/Bin/test_data/data`, which is automatically downloaded and updated by the `OpenEnroth_TestData` cmake target. Alternatively, if you cloned the OpenEnroth_TestData repository, you can use that.
+**Lua Language Server**:
+- Install `LuaLS` and ensure it is in PATH.
+- Generate project; `check_style` includes scripts if LuaLS is found.
+- If LuaLS missing, build still works (no script checks).
 
-If you need to look closely at the recorded trace, you can play it by running `OpenEnroth play --speed 0.5 <path-to-trace.json>`. Alternatively, if you already have a unit test that runs the recorded trace, you can run `OpenEnroth_GameTest --speed 0.5 --gtest_filter=<test-suite-name>.<test-name> --test-path <path-to-test-data-folder>`. Note that `--gtest_filter` needs that `=` and won't work if you try passing the test name after a space. 
+Tools:
+- VS Code + LuaLS extension recommended.
 
+Modding:
+- Not planned soon; see milestones.
 
-## How to deal with `Random state desynchronized`
-
-Changing game logic might result in failures in game tests because they check the random number generator state after each frame, and this will show as `Random state desynchronized when playing back trace` message in test logs. This is intentional – we don't want accidental game logic changes. **If** the change was actually intentional, then you will need to either retrace or re-record the traces for the failing tests as follows. These instructions assume your change is already submitted as PR backed from your fork, or will be.
-* Prepare to submit a PR to the [OpenEnroth_TestData](https://github.com/OpenEnroth/OpenEnroth_TestData) repo: Fork and clone it if you haven't done so already.
-* Reminder: Make sure your test data clone is up to date and has no uncommitted local changes, and create a branch.
-* To retrace, run `OpenEnroth retrace <path-to-trace.json>`. Note that you can pass multiple trace paths to this command. Use paths into your clone of the test data (if you retrace the copies in `<build-dir>/test/Bin/test_data/data` you'll need to copy them over).
-* Commit, push and PR the changes made by the retrace to OpenEnroth_TestData.
-* Back in the main OpenEnroth clone, paste the commit hash into the `GIT_TAG` key in `test/Bin/CMakeLists.txt`, replacing the one already there, and update the `GIT_REPOSITORY` to point to your clone of OpenEnroth_TestData.
-* Commit this to your main PR's branch and push it. The checks this push triggers should now succeed.
-
-
-## Scripting
-
-We're using Lua as the scripting language, and all our scripts are currently located under the `resources/scripts` folder.
-
-
-#### Lua Language Server
-Script files undergo a syntax checking process during the build generation. If you intend to work with scripts, it is recommended to install the [Lua Language Server](https://github.com/LuaLS/lua-language-server) to run the style checker locally. Follow these steps to setup `LuaLS` locally:
-- Install `LuaLS` through one of the [following methods](https://luals.github.io/#other-install). Ensure that the lua-language-server executable is available in the `PATH` environment variable.
-- Generate the project.
-- The `check_style` target is now including scripting in its tests.
-
-Little note: If `LuaLS` is not found, everything still build but no checks will be run against the Lua scripts.
-
-#### Tools
-To go through a better experience while working with scripts it is strongly recommended to use [VS Code](https://code.visualstudio.com/) and [install the LuaLS extension](https://luals.github.io/#vscode-install).
-Just be sure to open the root repository folder in `VS Code`. By doing so `LuaLS` reads the correct configuration file used by the project
-
-#### Modding ?
-Scripting is currently used only for debugging purposes. Modding support is not planned for the near future. You can check the [milestones](https://github.com/OpenEnroth/OpenEnroth/milestones) to get a better idea.
-
+---
 
 ## Console Commands
+In-game debug console:
+1. Launch game.
+2. Load/create game.
+3. Press `~`.
+Console only available in-game.
 
-The game features a console capable of executing various Lua script commands. To activate this feature, please follow these steps:
-
-1. Launch the game.
-2. Begin by loading an existing game or creating a new one.
-3. Once in-game, press the `~` key to open the debug console.
-
-Currently, the console is only available while in-game.
-
+---
 
 ## Additional Resources
-
-Old event decompiler and IDB files can be found [here](https://www.dropbox.com/sh/if4u3lphn633oit/AADUYMxNcrkAU6epJ50RskyXa?dl=0). Feel free to ping `zipi#6029` on Discord for more info.
-
+Old event decompiler + IDB files:  
+https://www.dropbox.com/sh/if4u3lphn633oit/AADUYMxNcrkAU6epJ50RskyXa?dl=0  
+Contact: `zipi#6029` on Discord.
 
 ## Support
-
-Still having problems? Ask for help on our discord! [![](https://img.shields.io/badge/chat-on%20discord-green.svg)](https://discord.gg/jRCyPtq)
+Discord: https://discord.gg/jRCyPtq
 
 ## End of Enroth original flat Documentation
 
-# Sistema de Casas no OpenEnroth (MM7 VR)
+---
 
-Esta sessão detalha o funcionamento técnico da transição do ambiente 3D para as telas 2D de interiores de casas (lojas, guildas, templos, etc.) no projeto OpenEnroth, servindo como base para a implementação da interface em VR.
+# House System in OpenEnroth (MM7 VR)
 
-## 1. Fluxo de Entrada (3D -> 2D)
+## 1. Entry Flow (3D -> 2D)
+An event in `EvtInterpreter.cpp` (opcode `EVENT_SpeakInHouse`) calls `enterHouse(houseId)`.
 
-A entrada em uma casa é disparada por eventos no mapa (geralmente ao clicar em uma porta ou decoração interativa).
+**Validation and setup** (`src/GUI/UI/UIHouses.cpp`, `enterHouse(HouseId uHouseID)`):
+- clears the message queue and status bar;
+- validates opening hours (`houseTable`);
+- checks for bans;
+- prepares the NPC list via `prepareHouse()`;
+- returns `true` if entry is allowed.
 
-### Gatilho de Evento
-- O interpretador de eventos ([EvtInterpreter.cpp](file:///c:/Users/Usuário/www/mm7_vr/src/Engine/Evt/EvtInterpreter.cpp)) processa o opcode `EVENT_SpeakInHouse`.
-- Este opcode chama a função `enterHouse(houseId)`.
+If allowed, `createHouseUI(houseId)` creates a specific `GUIWindow_House` and stores it in `window_SpeakInHouse`.
+In the `GUIWindow_House` constructor:
+- `current_screen_type = SCREEN_HOUSE`;
+- `pEventTimer->setPaused(true)` pauses game time;
+- loads the 2D background and NPC buttons.
 
-### Validação e Preparação
-- **Arquivo**: [UIHouses.cpp](file:///c:/Users/Usuário/www/mm7_vr/src/GUI/UI/UIHouses.cpp)
-- **Função**: `enterHouse(HouseId uHouseID)`
-    - Limpa a fila de mensagens e a barra de status.
-    - Verifica o horário de funcionamento da casa (com base na `houseTable`).
-    - Verifica se o grupo está banido da loja.
-    - Prepara a lista de NPCs presentes na casa via `prepareHouse()`.
-    - Retorna `true` se a entrada for permitida.
+## 2. 2D Interface
+Static background, NPC portraits at the bottom, right-side menu (buy/sell/train), and dialog area.
 
-### Instanciação da Interface
-- Se `enterHouse` for bem-sucedido, o interpretador chama `createHouseUI(houseId)`.
-- **Função**: `createHouseUI(HouseId houseId)`
-    - Cria uma instância específica de `GUIWindow_House` baseada no tipo da casa (ex: `GUIWindow_Bank`, `GUIWindow_MagicGuild`, `GUIWindow_Temple`).
-    - A variável global `window_SpeakInHouse` armazena a janela ativa.
+## 3. Exit Flow (2D -> 3D)
+`houseDialogPressEscape()` (`src/GUI/UI/UIHouses.cpp`):
+- if in a submenu, returns to the main house menu;
+- if on the main menu, clears `currentHouseNpc`, releases `pDialogueWindow`, returns `false`.
 
-### Estado da Tela
-- No construtor de `GUIWindow_House`:
-    - `current_screen_type` é alterado para `SCREEN_HOUSE`.
-    - `pEventTimer->setPaused(true)` pausa o tempo do jogo para evitar ataques enquanto o jogador está no menu.
-    - Carrega o fundo 2D (shop background) e cria os botões dos NPCs.
+On exit: `window_SpeakInHouse->Release()`, `current_screen_type = SCREEN_GAME`, game time resumes.
 
-## 2. Interface e Interação 2D
+## 4. 2D Screen in VR (Virtual Monitor)
+**Rendering**:
+1. **Capture**: `Engine.cpp` calls `CaptureScreenToOverlay`, using `glBlitFramebuffer` into `m_overlayTexture` (VRManager).
+2. **World-lock**: when `SCREEN_HOUSE` is detected, `m_debugHouseIndicator` is enabled. On first run, it captures the HMD pose and places the screen **2.5m** forward (`VRManager.cpp:L570`).
+3. **Stereo projection**: per eye, it projects to NDC, uses `glScissor`, and draws the texture with an orthographic projection (`VRManager.cpp:L606-612`).
 
-Diferente do menu principal, as casas possuem uma estrutura de interface mais complexa:
-- **Fundo Estático**: Imagem 2D representando o interior.
-- **Retratos de NPCs**: Localizados na parte inferior, permitem alternar entre os personagens da casa.
-- **Menu Lateral (Direito)**: Opções de diálogo e serviços (comprar, vender, treinar).
-- **Diálogo**: Área central/lateral para textos de NPCs.
-
-## 3. Fluxo de Saída (2D -> 3D)
-
-A saída ocorre quando o jogador clica no botão "Exit" ou pressiona Escape.
-
-### Lógica de Fechamento
-- **Função**: `houseDialogPressEscape()` em [UIHouses.cpp](file:///c:/Users/Usuário/www/mm7_vr/src/GUI/UI/UIHouses.cpp).
-    - Se estiver em um sub-menu (ex: comprando itens), volta para o menu principal da casa.
-    - Se estiver no menu principal da casa, limpa `currentHouseNpc`, libera a janela `pDialogueWindow` e retorna `false`, sinalizando a saída definitiva.
-- No `EvtInterpreter.cpp` ou no loop principal, ao detectar a saída:
-    - `window_SpeakInHouse->Release()` é chamado.
-    - `current_screen_type` volta para `SCREEN_GAME`.
-    - O tempo do jogo é retomado.
-
-## 4. Implementação da Tela 2D em VR (Virtual Monitor)
-
-Para integrar as interfaces 2D das casas na experiência VR, implementamos um sistema de "Monitor Virtual" que ancora a tela no espaço 3D.
-
-### Fluxo de Renderização
-A renderização da interface em VR ocorre em três etapas principais:
-
-1. **Captura do Frame (Blit):**
-   - No loop principal em [Engine.cpp](file:///c:/Users/Usuário/www/mm7_vr/src/Engine/Engine.cpp), a função `CaptureScreenToOverlay` é chamada.
-   - Ela utiliza `glBlitFramebuffer` para copiar o conteúdo do backbuffer (onde a interface 2D padrão é desenhada) para uma textura dedicada `m_overlayTexture` no `VRManager`.
-
-2. **Ancoragem no Mundo (World-Locking):**
-   - Ao detectar que `current_screen_type == SCREEN_HOUSE`, o `VRManager` ativa o `m_debugHouseIndicator`.
-   - Na primeira execução dentro da casa, o sistema captura a posição e orientação atual do HMD via `m_views[m_currentViewIndex].viewMatrix`.
-   - A tela é posicionada a **2.5 metros** à frente da posição capturada, criando um ponto fixo no espaço 3D ([VRManager.cpp:L570](file:///c:/Users/Usuário/www/mm7_vr/src/Engine/VR/VRManager.cpp#L570)).
-
-3. **Projeção Estéreo e Scissor:**
-   - A cada frame de cada olho, a posição 3D da tela é projetada de volta para coordenadas de tela (NDC) usando as matrizes de visão e projeção específicas do olho.
-   - Utilizamos `glScissor` para definir a área de exibição e desenhamos a textura capturada usando uma projeção ortogonal ([VRManager.cpp:L606-612](file:///c:/Users/Usuário/www/mm7_vr/src/Engine/VR/VRManager.cpp#L606-612)).
-   - Isso garante que cada olho veja a tela com o deslocamento correto, proporcionando profundidade 3D natural e conforto visual (convergência estéreo).
-
-### Controle de Estado
-- **Entrada**: `SetDebugHouseIndicator(true)` reseta `m_housePoseInitialized`, forçando a captura de uma nova âncora baseada na posição atual do jogador ao entrar na casa.
-- **Saída**: Ao retornar para `SCREEN_GAME`, o indicador é desativado, removendo a tela 2D da visão VR.
-
-## 5. Próximos Passos (VR Port)
-
-Seguiremos estas diretrizes para refinamento:
-1. **Cursor**: Mapear o cursor do mouse para o analógico esquerdo (ou movimento da mão).
-2. **Seleção**: Utilizar os triggers dos controladores para simular o clique do mouse.
-3. **Logs de Depuração**: Foram adicionados logs em `enterHouse` e `houseDialogPressEscape` para rastrear os IDs das casas e validar o mapeamento de eventos.
+**State control**:
+- Entry: `SetDebugHouseIndicator(true)` resets `m_housePoseInitialized`.
+- Exit: when returning to `SCREEN_GAME`, the indicator is disabled.
